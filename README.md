@@ -11,5 +11,5 @@ Code for the analysis of Xinavane worker data.
   b. `"Xinavane_plantilla trabajadores_agriculture_joe.xls"`
   c. `"Xinavane_sickness_agriculture_joe.xls"`
 4. Open the `xinavane.Rproj` file in Rstudio.
-5. Run `code/read_in.R` (this will create an RData file in your `data` folder named `"read_in_finished.RData").
+5. Run `code/read_in.R` (this will create an RData file in your `data` folder named `"read_in_finished.RData"`).
 6. Run `code/analysis.R`.
