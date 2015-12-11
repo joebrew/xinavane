@@ -1,0 +1,275 @@
+---
+title: "Xinavane data overview"
+author: "Joe Brew and Elisa Sicuri"
+date: "December 11, 2015"
+output:
+  pdf_document:
+    includes:
+      in_header: mystyle.sty
+tables: yes
+latex_engine: xelatex
+highlight: zenburn
+toc: yes
+fig_width: 4
+fig_height: 2.6
+header-includes:
+     - \usepackage{longtable}
+---
+
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, comment = NA, error= FALSE }
+# No scientific notation
+options(scipen=999)
+
+##### PACKAGES
+library(knitr)
+library(png)
+library(grid)
+library(extrafont)
+library(gridExtra)
+library(ggmap)
+library(raster)
+loadfonts(device = 'postscript', quiet = TRUE)
+
+# BASIC KNITR OPTIONS
+opts_chunk$set(comment = NA, echo = FALSE, warning = FALSE, message = FALSE, fig.height = 3.5)
+options(xtable.comment = FALSE)
+```
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, comment = NA, error= FALSE }
+##### READ IN DATA
+setwd('..')
+source('code/read_in.R')
+setwd('reports')
+```
+
+# Datasets  
+
+There are 3 datasets from Xinavane:  
+
+```{r}
+data_sets <- dir(data_dir)
+data_sets <- data_sets[which(grepl('xls', data_sets))]
+for (i in 1:length(data_sets)){
+  cat(paste0(i, '. ', data_sets[i], '\n'))
+}
+```
+
+Datasets 1 and 3 pertain to worker absences.  These are mutually exclusive sets (ie, absences appearing in the "general" dataset do not appear in the sickness dataset, and vice-versa).
+
+Dataset 2 has worker sociodemographic, financial and bureaucratic details.
+
+# Exploration
+
+## Absences  
+
+Absenteeism data spans from September 1st, 2015 until November 24th, 2015 (86 days). On average, there are 214 absences per day.  Though there appears to be some longer-term variation in the below chart, it's clear that the most important factor is weekly seasonality:  
+
+```{r}
+temp <- ab %>%
+  group_by(date) %>%
+  tally
+ggplot(data = temp, 
+       aes(x = date, y = n)) +
+  geom_line(alpha = 0.6) +
+  geom_point(alpha = 0.6) +
+  geom_smooth() +
+  xlab('Date') +
+  ylab('Absences') +
+  ggtitle('Crude worker absences')
+```
+
+## Adjustment for worker days  
+
+Crude absence data is relatively useless, given that it doesn't take into account the number of workers "susceptible" of absence on any given day (ie, the number of workers who were _supposed_ to work).  This explains why there are much fewer absences at certain times (Sunday) relative to others.
+
+```{r}
+temp <- ab %>%
+  mutate(dow = weekdays(date)) %>%
+  group_by(dow) %>%
+  tally %>%
+  filter(!is.na(dow))
+temp <- temp[c(2,6,7,5,1,3,4),]
+temp$dow <- factor(temp$dow, levels = temp$dow)
+
+ggplot(data = temp,
+       aes(x = dow,
+           y = n)) +
+  geom_bar(stat = 'identity', alpha = 0.6, fill = 'darkblue') +
+  xlab('Day of week') +
+  ylab('Cumulative absences') +
+  ggtitle('Absences by day of week') 
+```
+
+To account for the above issues, we can instead calculate an _absenteeism rate_, taking into account the employment beginning and end dates, leave statuses and working schedule of all the workers in the `Xinavane_plantilla trabajadores_agriculture_joe.xls` dataset. Essentially, we calculate the number of eligible workers for each day (the denominator in our rate). The result looks like this:
+
+```{r}
+# first_contract_start is the date of employment beginning
+# or company_entry_date?
+
+# Create a dataframe of every day
+df <- data.frame(
+  date = seq(min(ab$date, na.rm = TRUE),
+             max(ab$date, na.rm = TRUE),
+             by = 1))
+# Get day of week
+df$dow <- weekdays(df$date)
+
+# Loop through each date, getting eligible workers
+df$eligibles <- NA
+for (i in 1:nrow(df)){
+  df$eligibles[i] <- 
+    nrow(workers[workers$company_entry_date <= df$date[i] &
+                   workers$days_off != df$dow[i],])
+}
+
+ggplot(data = df,
+       aes(x = date, y = eligibles)) +
+  geom_area(fill = 'darkblue', alpha = 0.6) +
+  xlab('Date') +
+  ylab('Number of eligible workers') +
+  ggtitle('Worker scheduling')
+```
+
+Having calculated a better denominator, we can now move forward with an improved notion of the absenteeism rate (number of worker absences / eligible workers).  The result looks like this:
+
+```{r}
+temp <- ab %>%
+  group_by(date) %>%
+  tally() %>%
+  left_join(df) %>%
+  mutate(rate = n / eligibles * 100,
+         at_work = eligibles - n)
+
+ggplot(data = df,
+       aes(x = date, y = eligibles)) +
+  geom_area(fill = 'darkorange', alpha = 0.8) +
+  xlab('Date') +
+  ylab('Worker-days') +
+  ggtitle('Worker absences (orange) and presences (blue)') +
+  geom_area(data = temp,
+            aes(x = date, y = at_work),
+            fill = 'darkblue', alpha = 0.7)
+```
+
+For a simpler understanding, we can take the relative (rather than absolute) numbers:
+
+```{r}
+ggplot(data = temp,
+       aes(x = date, y = rate)) +
+  geom_area(alpha = 0.6, fill = 'darkorange') +
+  xlab('Date') +
+  ylab('Absenteeism rate (%)') +
+  ggtitle('Absenteeism rate during study period') +
+  geom_smooth() 
+```
+
+The daily average absenteeism rate (adjusted for worker eligibility) is 4%.  
+
+# Other worker data  
+
+The absenteeism data are relatively straightforward.  The worker data (`Xinavane_plantilla trabajadores_agriculture_joe.xls`), on the other hand, contain a wealth of relevant information.
+
+## Geography  
+
+```{r}
+# Create better address string
+temp <- workers
+temp$location_string <- paste0(ifelse(is.na(temp$address_4),
+                                      '',
+                                      paste0(temp$address_4, ', ')),
+                               temp$address_3,
+                               ', Mozambique')
+moz <- getData(name = 'GADM', country = 'MOZ', level = 3)
+moz_gg <- get_map(apply(coordinates(moz), 2, mean),
+                  zoom = 6,
+                  maptype = 'terrain')
+ggmap(moz_gg) +
+  xlab('Longitude') +
+  ylab('Latitude')
+```
+
+Unfortunately, the geographic data in the workers dataset is of inconsistent and low quality.  The `home location` field contains many missing and proprietary names (ie, "sede"), and even when addresses are provided, modern geocoding API's are largely unable to match at a level more granular than the city/town.  
+
+However, given the relatively small size of the number of workers (6,185), and the fact that a majority are on-site or nearby, manual geocoding of each location would be feasible (using typical hand-held cellular devices).
+
+## Age  
+
+To the extent that absenteeism is confounded with health (which is in turn affected by age), it's important to note the age of workers.
+
+```{r}
+temp <- workers
+temp$age <- as.numeric((Sys.Date() - temp$date_of_birth) / 365.25)
+ggplot(data = temp,
+       aes(x = age)) +
+  geom_density(fill = 'darkblue', alpha = 0.6) +
+  xlab('Age (years)') +
+  ylab('Density') +
+  ggtitle('Age distribution of Xinavane workers')
+```
+
+Workers range from 17 to 70, with 50% falling between 28 and 42.  It's worthwhile to note that the age of workers varies significantly by _type_:
+
+```{r}
+temp <- temp[!is.na(temp$type),]
+ggplot(data = temp,
+       aes(x = type, 
+           y = age)) +
+  geom_jitter(alpha = 0.2) +
+  geom_violin(alpha = 0.4, fill = 'darkorange') +
+  xlab('Worker type') +
+  ylab('Age of workers (years)') +
+  ggtitle('Distribution of worker age by type')
+```
+
+Worker age also varies significantly by category:  
+
+```{r}
+temp <- temp[!is.na(temp$category),]
+ggplot(data = temp,
+       aes(x = category, 
+           y = age)) +
+  geom_jitter(alpha = 0.2) +
+  geom_violin(alpha = 0.4, fill = 'darkorange') +
+  xlab('Worker category') +
+  ylab('Age of workers (years)') +
+  ggtitle('Distribution of worker age by category')
+```
+
+## Gender  
+
+The ratio of males to females at Xinavane is greater than 2 to 1:
+
+```{r}
+ggplot(data = workers[!is.na(workers$gender),], aes(gender)) +
+  geom_bar(fill = 'darkblue', alpha = 0.6) +
+  xlab('Gender') +
+  ylab('Workers') +
+  ggtitle('Distribution of worker gender')
+```
+
+## Marital status  
+
+Either (a) the facility has a highly unusual subset of single Mozambicans or (b) marriage is underreported in the data:  
+
+```{r}
+ggplot(data = workers[!is.na(workers$marital_status),], aes(marital_status)) +
+  geom_bar(fill = 'darkblue', alpha = 0.6) +
+  xlab('Marital status') +
+  ylab('Workers') +
+  ggtitle('Distribution of worker marital status')
+```
+
+
+# Details  
+
+All code for the cleaning, analysis and generation of this report are hosted on [github](https://github.com/joebrew/xinavane).
+
+******
+
+```{r, fig.height = 2.5}
+barplot(1, border = NA, col = 'white', yaxt = 'n')
+```
+
+![alt text](../img/is_global.jpg)
+
