@@ -1,7 +1,10 @@
 ---
 title: "Xinavane data overview"
-author: "Joe Brew and Elisa Sicuri"
-date: "December 11, 2015"
+author: 
+  - Laia Cirera
+  - Joe Brew
+  - Elisa Sicuri  
+date: "March 8, 2016"
 output:
   pdf_document:
     includes:
@@ -29,6 +32,8 @@ library(extrafont)
 library(gridExtra)
 library(ggmap)
 library(raster)
+library(tidyr)
+library(RColorBrewer)
 loadfonts(device = 'postscript', quiet = TRUE)
 
 # BASIC KNITR OPTIONS
@@ -42,28 +47,15 @@ setwd('..')
 source('code/read_in.R')
 setwd('reports')
 ```
+\newpage
 
-# Datasets  
-
-There are 3 datasets from Xinavane:  
-
-```{r}
-data_sets <- dir(data_dir)
-data_sets <- data_sets[which(grepl('xls', data_sets))]
-for (i in 1:length(data_sets)){
-  cat(paste0(i, '. ', data_sets[i], '\n'))
-}
-```
-
-Datasets 1 and 3 pertain to worker absences.  These are mutually exclusive sets (ie, absences appearing in the "general" dataset do not appear in the sickness dataset, and vice-versa).
-
-Dataset 2 has worker sociodemographic, financial and bureaucratic details.
 
 # Exploration
 
 ## Absences  
 
-Absenteeism data spans from September 1st, 2015 until November 24th, 2015 (86 days). On average, there are 214 absences per day.  Though there appears to be some longer-term variation in the below chart, it's clear that the most important factor is weekly seasonality:  
+
+Absenteeism data spans from `r format(min(ab$date, na.rm = TRUE), '%B %d, %Y')` until `r format(max(ab$date, na.rm = TRUE), '%B %d, %Y')`. On average, there are `r ab %>% group_by(date) %>% tally %>% summarise(mean(n)) %>% as.numeric() %>% round` absences per day.  Though there appears to be some longer-term variation in the below chart, it's clear that the most important factor is weekly seasonality:  
 
 ```{r}
 temp <- ab %>%
@@ -98,65 +90,114 @@ ggplot(data = temp,
   geom_bar(stat = 'identity', alpha = 0.6, fill = 'darkblue') +
   xlab('Day of week') +
   ylab('Cumulative absences') +
-  ggtitle('Absences by day of week') 
+  ggtitle('Crude absences by day of week') 
 ```
 
 To account for the above issues, we can instead calculate an _absenteeism rate_, taking into account the employment beginning and end dates, leave statuses and working schedule of all the workers in the `Xinavane_plantilla trabajadores_agriculture_joe.xls` dataset. Essentially, we calculate the number of eligible workers for each day (the denominator in our rate). The result looks like this:
 
 ```{r}
-# first_contract_start is the date of employment beginning
-# or company_entry_date?
 
-# Create a dataframe of every day
-df <- data.frame(
+# Create a dataframe of eligible absences
+x <- expand.grid(
   date = seq(min(ab$date, na.rm = TRUE),
              max(ab$date, na.rm = TRUE),
-             by = 1))
+             by = 1),
+  number = unique(workers$number))
 # Get day of week
-df$dow <- weekdays(df$date)
+x$dow <- weekdays(x$date)
 
-# Loop through each date, getting eligible workers
-df$eligibles <- NA
-for (i in 1:nrow(df)){
-  df$eligibles[i] <- 
-    nrow(workers[workers$company_entry_date <= df$date[i] &
-                   workers$days_off != df$dow[i],])
-}
+# Remove those dates for which the worker has off
+x <- left_join(x = x,
+               y = workers %>%
+                 dplyr::select(number, days_off),
+               by = c("number")) %>%
+  filter(dow != days_off)
 
-ggplot(data = df,
-       aes(x = date, y = eligibles)) +
-  geom_area(fill = 'darkblue', alpha = 0.6) +
-  xlab('Date') +
-  ylab('Number of eligible workers') +
-  ggtitle('Worker scheduling')
-```
+# Get start and  dates
+x <- left_join(x = x,
+               y = workers %>%
+                 dplyr::select(number,
+                               company_entry_date))
 
-Having calculated a better denominator, we can now move forward with an improved notion of the absenteeism rate (number of worker absences / eligible workers).  The result looks like this:
+# Remove those workers who hadn't yet started
+x <- x %>%
+  dplyr::filter(date >= company_entry_date)
 
-```{r}
-temp <- ab %>%
+# x is now a dataframe containg all
+# unique worker-days for which a worker
+# SHOULD have worked
+
+# Now we need to bring absences into x
+x <- x %>%
+  left_join(ab %>%
+              mutate(absence = TRUE) %>%
+              dplyr::select(number, type, date, absence)) %>%
+  mutate(absence = ifelse(is.na(absence), FALSE, absence))
+
+# Join worker data to our absence/eligibility dataframe
+df <- x %>%
+  left_join(workers %>%
+              dplyr::select(-days_off, -company_entry_date, -type))
+
+rm(x)
+# # ALTERNATIVE, LESS USEFUL APPROACH
+# # (for compatibility only)
+# # Create a dataframe of every day
+# df <- data.frame(
+#   date = seq(min(ab$date, na.rm = TRUE),
+#              max(ab$date, na.rm = TRUE),
+#              by = 1))
+# # Get day of week
+# df$dow <- weekdays(df$date)
+# 
+# # Loop through each date, getting eligible workers
+# df$eligibles <- NA
+# for (i in 1:nrow(df)){
+#   df$eligibles[i] <- 
+#     nrow(workers[workers$company_entry_date <= df$date[i] &
+#                    workers$days_off != df$dow[i],])
+# }
+# 
+
+temp <- df %>%
   group_by(date) %>%
-  tally() %>%
-  left_join(df) %>%
-  mutate(rate = n / eligibles * 100,
-         at_work = eligibles - n)
+  summarise(n = n(),
+            absences = length(which(absence))) %>%
+  mutate( p = absences / n * 100)
+temp_g <- gather(temp, key, value, n:absences)
+temp_g$key <-
+  ifelse(temp_g$key == 'absences', 'Worker absence',
+         ifelse(temp_g$key == 'n', 'Eligible worker-day',
+                NA))
+temp_g$key <-
+  factor(temp_g$key, levels = rev(unique(temp_g$key)))
 
-ggplot(data = df,
-       aes(x = date, y = eligibles)) +
-  geom_area(fill = 'darkorange', alpha = 0.8) +
+# ggplot(data = temp_g,
+#        aes(x = date, y = value, group = key, fill = key)) +
+#   geom_area() +
+#   xlab('Date') +
+#   ylab('Number of eligible workers') +
+#   ggtitle('Worker scheduling')
+
+ggplot(data = temp) +
+  geom_area(aes(x = date, y = n), fill = 'darkblue', alpha = 0.7) +
+  geom_area(aes(x = date, y = absences), fill = 'darkorange', alpha = 0.6) +
   xlab('Date') +
   ylab('Worker-days') +
-  ggtitle('Worker absences (orange) and presences (blue)') +
-  geom_area(data = temp,
-            aes(x = date, y = at_work),
-            fill = 'darkblue', alpha = 0.7)
+  ggtitle('Absences (orange) and worker-days observed (blue)')
 ```
 
-For a simpler understanding, we can take the relative (rather than absolute) numbers:
+Absenteeism b
+
+## Absenteeism rate  
+
+The absenteeism rate is calculated by dividing the number of worker-absences per day over the number of worker-days on the schedule (ie, those who were _supposed_ to work that day).  Over time, absenteeism at Xinavane appears like this.
+
+
 
 ```{r}
 ggplot(data = temp,
-       aes(x = date, y = rate)) +
+       aes(x = date, y = p)) +
   geom_area(alpha = 0.6, fill = 'darkorange') +
   xlab('Date') +
   ylab('Absenteeism rate (%)') +
@@ -164,11 +205,33 @@ ggplot(data = temp,
   geom_smooth() 
 ```
 
-The daily average absenteeism rate (adjusted for worker eligibility) is 4%.  
+The daily average absenteeism rate (adjusted for worker eligibility) is `r round(weighted.mean(temp$p, temp$n), digits = 2)`%.  
 
-# Other worker data  
+## Absenteeism rate by worker type  
 
-The absenteeism data are relatively straightforward.  The worker data (`Xinavane_plantilla trabajadores_agriculture_joe.xls`), on the other hand, contain a wealth of relevant information.
+Agricultural workers have significantly higher absenteeism than those that work in the factory or in general services.  
+
+```{r}
+temp <- df %>%
+  group_by(date, worker_type) %>%
+  summarise(n = n(),
+            absences = length(which(absence))) %>%
+  mutate( p = absences / n * 100)
+
+cols <- brewer.pal(n = length(unique(temp$worker_type)), 'Spectral')
+
+ggplot(data = temp,
+       aes(x = date, y = p, group = worker_type, color = worker_type)) +
+  geom_line(alpha = 0.3) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(alpha = 0.1) +
+  xlab('Date') +
+  ylab('Absenteeism rate') +
+  scale_color_manual(values = cols,
+                     name = 'Worker type') +
+  ggtitle('Worker absenteeism by type')
+
+```
 
 ## Geography  
 
@@ -189,7 +252,7 @@ ggmap(moz_gg) +
   ylab('Latitude')
 ```
 
-Unfortunately, the geographic data in the workers dataset is of inconsistent and low quality.  The `home location` field contains many missing and proprietary names (ie, "sede"), and even when addresses are provided, modern geocoding API's are largely unable to match at a level more granular than the city/town.  
+Unfortunately, the geographic data in the workers dataset is of inconsistent and low quality.  The `home location` field contains many missing and proprietary names, and even when addresses are provided, modern geocoding API's are largely unable to match at a level more granular than the city/town.  
 
 However, given the relatively small size of the number of workers (6,185), and the fact that a majority are on-site or nearby, manual geocoding of each location would be feasible (using typical hand-held cellular devices).
 
@@ -208,7 +271,7 @@ ggplot(data = temp,
   ggtitle('Age distribution of Xinavane workers')
 ```
 
-Workers range from 17 to 70, with 50% falling between 28 and 42.  It's worthwhile to note that the age of workers varies significantly by _type_:
+It's worthwhile to note that the age of workers varies significantly by _type_:
 
 ```{r}
 temp <- temp[!is.na(temp$type),]
@@ -236,6 +299,42 @@ ggplot(data = temp,
   ggtitle('Distribution of worker age by category')
 ```
 
+Age does not appear to be correlated with absences:
+
+```{r}
+temp <- df %>%
+  mutate(age = as.numeric((Sys.Date() - date_of_birth) / 365.25)) %>%
+  group_by(number) %>%
+  summarise(absenteeism_rate = length(which(absence)) / n() * 100,
+            age = first(age)) %>%
+  filter(age <= 70)
+
+ggplot(data = temp,
+       aes(x = age, y = absenteeism_rate)) +
+  geom_point(alpha = 0.2) +
+  xlab('Age') +
+  ylab('Absenteeism rate') +
+  geom_smooth() +
+  ggtitle('Age and absenteeism')
+```
+
+When we group by decade, a trend becomes slightly more apparent:
+
+```{r}
+temp$age_group <- factor(floor(temp$age / 10) * 10)
+
+ggplot(data = temp,
+       aes(x = age_group, 
+           y = absenteeism_rate)) +
+  geom_jitter(alpha = 0.2) +
+  geom_violin(alpha = 0.4, fill = 'darkorange') +
+  xlab('Age group (by decade)') +
+  ylab('Absenteeism rate') +
+  ggtitle('Absenteeism rate by age (grouped)')
+
+
+```
+
 ## Gender  
 
 The ratio of males to females at Xinavane is greater than 2 to 1:
@@ -246,6 +345,51 @@ ggplot(data = workers[!is.na(workers$gender),], aes(gender)) +
   xlab('Gender') +
   ylab('Workers') +
   ggtitle('Distribution of worker gender')
+```
+
+
+
+```{r}
+temp <- df %>% 
+  filter(!is.na(gender)) %>%
+  group_by(gender) %>%
+    summarise(n = n(),
+            absences = length(which(absence))) %>%
+  mutate( p = absences / n * 100)
+
+ggplot(data = temp,
+       aes(x = gender, y = p)) +
+  geom_bar(stat = 'identity',
+           color = 'black',
+           fill = 'darkorange',
+           alpha = 0.6) +
+  xlab('Gender') +
+  ylab('Absenteeism rate') +
+  ggtitle('Absenteeism rate by gender') +
+  geom_label(aes(label = paste0(round(p, digits = 2), '%')))
+```
+
+If we examine absences over time by gender, it is difficult to distinguish a trend:
+
+```{r}
+temp <- df %>%
+  group_by(date, gender) %>%
+      summarise(n = n(),
+            absences = length(which(absence))) %>%
+  mutate( p = absences / n * 100)
+
+cols <- c('blue', 'red')
+ggplot(data = temp,
+       aes(x = date, y = p, group = gender, color = gender)) +
+  geom_line(alpha = 0.3) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(alpha = 0.1) +
+  xlab('Date') +
+  ylab('Absenteeism rate') +
+  scale_color_manual(values = cols,
+                     name = 'Gender') +
+  ggtitle('Worker absenteeism by gender')
+
 ```
 
 ## Marital status  
