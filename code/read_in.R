@@ -163,9 +163,16 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   # For now, just removing duplicates
   workers <- workers[!duplicated(workers$id_number),]
   setwd(root_dir)
-  
+  rm(x)
   ##### SAVE IMAGE
   save.image(paste0(data_dir, '/read_in_finished.RData'))
-  
 }
 msg('Done reading in and cleaning data.')
+
+# Write spreadsheets for laia (requested on 2016-04-13)
+if(!dir.exists('~/Desktop/magude')){
+  dir.create('~/Desktop/magude')
+}
+setwd('~/Desktop/magude')
+write_csv(ab, 'xinavane_worker_absenteeism.csv')
+write_csv(workers, 'xinavane_worker_demographics.csv')
