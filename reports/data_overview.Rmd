@@ -139,7 +139,17 @@ df <- x %>%
   left_join(workers %>%
               dplyr::select(-days_off, -company_entry_date, -type))
 
-rm(x)
+# Write spreadsheets for laia (requested on 2016-04-13)
+if(!dir.exists('~/Desktop/magude')){
+  dir.create('~/Desktop/magude')
+}
+dd <- getwd()
+setwd('~/Desktop/magude')
+laia <- df
+write_csv(df, 'xinavane_worker_absences_and_presences.csv')
+setwd(dd)
+
+rm(x, dd)
 # # ALTERNATIVE, LESS USEFUL APPROACH
 # # (for compatibility only)
 # # Create a dataframe of every day
