@@ -34,6 +34,7 @@ library(ggmap)
 library(raster)
 library(tidyr)
 library(RColorBrewer)
+library(xtable)
 loadfonts(device = 'postscript', quiet = TRUE)
 
 # BASIC KNITR OPTIONS
@@ -139,17 +140,17 @@ df <- x %>%
   left_join(workers %>%
               dplyr::select(-days_off, -company_entry_date, -type))
 
-# Write spreadsheets for laia (requested on 2016-04-13)
-if(!dir.exists('~/Desktop/magude')){
-  dir.create('~/Desktop/magude')
-}
-dd <- getwd()
-setwd('~/Desktop/magude')
-laia <- df
-write_csv(df, 'xinavane_worker_absences_and_presences.csv')
-setwd(dd)
-
-rm(x, dd)
+# # Write spreadsheets for laia (requested on 2016-04-13)
+# if(!dir.exists('~/Desktop/magude')){
+#   dir.create('~/Desktop/magude')
+# }
+# dd <- getwd()
+# setwd('~/Desktop/magude')
+# laia <- df
+# write_csv(df, 'xinavane_worker_absences_and_presences.csv')
+# setwd(dd)
+# 
+# rm(x, dd)
 # # ALTERNATIVE, LESS USEFUL APPROACH
 # # (for compatibility only)
 # # Create a dataframe of every day
@@ -182,6 +183,9 @@ temp_g$key <-
 temp_g$key <-
   factor(temp_g$key, levels = rev(unique(temp_g$key)))
 
+# Add a line for mda
+temp_g$mda <- temp_g$date >= as.Date('2016-01-18')
+temp$mda <- temp$date >= as.Date('2016-01-18')
 # ggplot(data = temp_g,
 #        aes(x = date, y = value, group = key, fill = key)) +
 #   geom_area() +
@@ -197,7 +201,6 @@ ggplot(data = temp) +
   ggtitle('Absences (orange) and worker-days observed (blue)')
 ```
 
-Absenteeism b
 
 ## Absenteeism rate  
 
@@ -206,13 +209,33 @@ The absenteeism rate is calculated by dividing the number of worker-absences per
 
 
 ```{r}
+# Make an mda dataframe for labeling
+mda <- data.frame(date = as.Date('2016-01-18'),
+                  mda = 'MDA',
+                  y = 8)
+
 ggplot(data = temp,
        aes(x = date, y = p)) +
   geom_area(alpha = 0.6, fill = 'darkorange') +
   xlab('Date') +
   ylab('Absenteeism rate (%)') +
   ggtitle('Absenteeism rate during study period') +
-  geom_smooth() 
+  geom_smooth() +
+  geom_vline(data = mda, aes(xintercept = as.numeric(date)),
+             alpha = 0.7,
+             lty = 3) +
+  geom_label(data = mda,
+             aes(x = date,
+                 y = y,
+                 label = mda))
+if(!dir.exists('~/Desktop/visuals')){
+  dir.create('~/Desktop/visuals')
+}
+dd <- getwd()
+setwd('~/Desktop/visuals')
+ggsave('vis1.pdf')
+setwd(dd)
+
 ```
 
 The daily average absenteeism rate (adjusted for worker eligibility) is `r round(weighted.mean(temp$p, temp$n), digits = 2)`%.  
@@ -228,19 +251,94 @@ temp <- df %>%
             absences = length(which(absence))) %>%
   mutate( p = absences / n * 100)
 
+# Add a line for mda
+temp$mda <- temp$date >= as.Date('2016-01-18')
+
 cols <- brewer.pal(n = length(unique(temp$worker_type)), 'Spectral')
 
 ggplot(data = temp,
-       aes(x = date, y = p, group = worker_type, color = worker_type)) +
-  geom_line(alpha = 0.3) +
-  geom_point(alpha = 0.3) +
-  geom_smooth(alpha = 0.1) +
+       aes(x = date, y = p)) +
+  geom_line(alpha = 0.3, aes(group = worker_type, color = worker_type)) +
+  geom_point(alpha = 0.3, aes(group = worker_type, color = worker_type)) +
+  geom_smooth(alpha = 0.1, aes(group = worker_type, color = worker_type)) +
   xlab('Date') +
   ylab('Absenteeism rate') +
   scale_color_manual(values = cols,
                      name = 'Worker type') +
-  ggtitle('Worker absenteeism by type')
+  ggtitle('Worker absenteeism by type') +
+    geom_vline(data = mda, aes(xintercept = as.numeric(date)),
+             alpha = 0.7,
+             lty = 3) +
+  geom_label(data = mda,
+             aes(x = date,
+                 y = y,
+                 label = mda))
+if(!dir.exists('~/Desktop/visuals')){
+  dir.create('~/Desktop/visuals')
+}
+dd <- getwd()
+setwd('~/Desktop/visuals')
+ggsave('vis2.pdf')
+setwd(dd)
 
+```
+
+\newpage
+
+## Effect of MDA  
+
+Though we have very little post-MDA data under observation, and we cannot account for seasonality (since there is less than a year's worth of data), we can still try to assess the effect of the MDA on worker absenteeism.  To this end, we use logistic regression to estimate the likelihood of absenteeism as a function of pre-/post- MDA, adjusting for worker type. 
+
+```{r}
+temp <- df %>%
+  dplyr::select(worker_type, date, absence)
+# Assign wheter pre or post MDA
+temp$mda <- temp$date >= as.Date('2016-01-18')
+
+# Relevel factors
+temp$mda <- ifelse(temp$mda, 'after', 'before')
+temp$mda <- factor(temp$mda, levels = c('before', 'after'))
+
+temp$worker_type <- factor(temp$worker_type,
+                           levels = c('general services',
+                                      'factory',
+                                      'agriculture'))
+
+# Relevel the absence
+temp$absence <- ifelse(temp$absence, 1, 0)
+
+# Estimate model
+fit <- glm(absence ~ mda + worker_type, 
+          data = temp,
+          family = 'binomial')
+
+# Get odds ratios
+# ors <- exp(coef(fit))
+
+# Get 95% confidence intervals
+# ors <- exp(cbind(OR = coef(fit), confint(fit)))
+if('x.csv' %in% dir()){
+  x <- read_csv('x.csv')
+} else {
+  x <- data.frame(ors)
+  x$characteristic <- row.names(x); row.names(x) <- NULL
+  names(x)[2:3] <- c('lwr', 'upr')
+  x <- x[,c('characteristic', 'OR', 'lwr', 'upr')]
+  x$characteristic <- gsub('mda','MDA: ', x$characteristic)
+  x$characteristic <- gsub('worker_type', 'Worker type: ', x$characteristic)
+  write_csv(x, 'x.csv')
+}
+
+
+# # Clean up
+# library(broom)
+# fit <- tidy(fit)
+```
+
+In the model, after adjustment for worker type, we find that the odds of absence is significantly lower following the MDA (odds ratio of 0.85, 95% confidence interval of 0.83 to 0.87). In other words, the MDA was associated with a reduction of 14.5% in worker absenteeism. 
+
+```{r, results='asis'}
+print(xtable(x))
 ```
 
 ## Geography  
