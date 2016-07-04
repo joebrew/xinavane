@@ -25,30 +25,30 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   reader <- function(worker_type = 'agriculture'){
     if(worker_type == 'agriculture'){
       # General absteneeism data
-      all_ab <- rbind(
+      all_ab <- #rbind(
         read_excel(paste0(capitalize(worker_type), 
                           '/Xinavane_general absenteeism_',
                           worker_type,
                           '_1.xls'),
-                   skip = 1),
-          read_excel(paste0(capitalize(worker_type), 
-        '/Xinavane_general absenteeism_',
-        worker_type,
-        '_2.xls'),
-      skip = 1))
+                   skip = 1)#,
+      #     read_excel(paste0(capitalize(worker_type), 
+      #   '/Xinavane_general absenteeism_',
+      #   worker_type,
+      #   '_2.xls'),
+      # skip = 1))
     } else {
       # General absteneeism data
-      all_ab <- rbind(
+      all_ab <- #rbind(
         read_excel(paste0(capitalize(worker_type), 
                           '/Xinavane_general absenteeism_',
                           worker_type,
                           '_1.xls'),
-                   skip = 1),
-          read_excel(paste0(capitalize(worker_type), 
-        '/Xinavane_general absenteeism_',
-        worker_type,
-        '_2.xls'),
-      skip = 1))
+                   skip = 1)#,
+      #     read_excel(paste0(capitalize(worker_type), 
+      #   '/Xinavane_general absenteeism_',
+      #   worker_type,
+      #   '_2.xls'),
+      # skip = 1))
     }
     
     all_ab <- all_ab[!duplicated(all_ab),]
@@ -68,12 +68,12 @@ if('read_in_finished.RData' %in% dir(data_dir)){
     
     # Worker data
     workers <- rbind(read_excel(paste0(capitalize(worker_type),
-                                       '/Xinavane_plantilla trabalhadores_',
+                                       '/Xinavane_plantilla trabajadores_',
                                        worker_type,
                                        '_1.xls'),
                                 skip = 1),
                      read_excel(paste0(capitalize(worker_type),
-                                       '/Xinavane_plantilla trabalhadores_',
+                                       '/Xinavane_plantilla trabajadores_',
                                        worker_type,
                                        '_2.xls'),
                                 skip = 1))
