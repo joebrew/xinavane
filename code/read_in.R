@@ -19,64 +19,55 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   load(paste0(data_dir, '/read_in_finished.RData'))
 } else {
   
-  setwd(data_dir)
+  # setwd(data_dir)
 
   # Define function to read in data
   reader <- function(worker_type = 'agriculture'){
-    if(worker_type == 'agriculture'){
-      # General absteneeism data
-      all_ab <- #rbind(
-        read_excel(paste0(capitalize(worker_type), 
-                          '/Xinavane_general absenteeism_',
-                          worker_type,
-                          '_1.xls'),
-                   skip = 1)#,
-      #     read_excel(paste0(capitalize(worker_type), 
-      #   '/Xinavane_general absenteeism_',
-      #   worker_type,
-      #   '_2.xls'),
-      # skip = 1))
-    } else {
-      # General absteneeism data
-      all_ab <- #rbind(
-        read_excel(paste0(capitalize(worker_type), 
-                          '/Xinavane_general absenteeism_',
-                          worker_type,
-                          '_1.xls'),
-                   skip = 1)#,
-      #     read_excel(paste0(capitalize(worker_type), 
-      #   '/Xinavane_general absenteeism_',
-      #   worker_type,
-      #   '_2.xls'),
-      # skip = 1))
-    }
     
+    # Alter the worker type for reading in absenteeism data
+    wt <- ifelse(worker_type == 'agriculture',
+                 'Agric',
+                 ifelse(worker_type == 'factory',
+                        'Factory',
+                        'Gen Serv'))
+    
+    # Alter the worker type for reading in general data
+    wtg <- 
+      ifelse(worker_type == 'agriculture', 'Agriculture',
+             ifelse(worker_type == 'factory', 'Factory',
+                    'Gen Services'))
+    
+      # General absteneeism data
+    all_ab <- 
+      read_excel(paste0(
+        'data/Final data/',
+        'Gen Absenteeism_',
+        wt, 
+        '_1 jan 2015 to 5 jul 2016.xls'),
+        skip = 1)
+
+    # Remove duplicates
     all_ab <- all_ab[!duplicated(all_ab),]
     
     # Sickness-specific absenteeism data
-    sick_ab <- rbind(read_excel(paste0(capitalize(worker_type), 
-                                       '/Xinavane_sickness_',
-                                       worker_type,
-                                       '_1.xls'),
-                                skip = 1),
-                     read_excel(paste0(capitalize(worker_type), 
-                                       '/Xinavane_sickness_',
-                                       worker_type,
-                                       '_2.xls'),
-                                skip = 1))
+    sick_ab <- 
+      read_excel(paste0(
+        'data/Final data/',
+        'Sickness_',
+        wt, 
+        '_1 jan 2015 to 5 jul 2016.xls'),
+        skip = 1)
+
     sick_ab <- sick_ab[!duplicated(sick_ab),]
     
     # Worker data
-    workers <- rbind(read_excel(paste0(capitalize(worker_type),
-                                       '/Xinavane_plantilla trabajadores_',
-                                       worker_type,
-                                       '_1.xls'),
-                                skip = 1),
-                     read_excel(paste0(capitalize(worker_type),
-                                       '/Xinavane_plantilla trabajadores_',
-                                       worker_type,
-                                       '_2.xls'),
-                                skip = 1))
+    workers <- 
+      read_excel(paste0(
+        'data/Final data/Planilha Trabalhadores - ',
+        wtg,
+        '.xls'),
+        skip = 1)
+
     workers <- workers[!duplicated(workers),]
     workers$worker_type <- worker_type
     
@@ -95,8 +86,8 @@ if('read_in_finished.RData' %in% dir(data_dir)){
     names(ab) <- gsub("^\\s+|\\s+$", "", names(ab))
     # Spaces to underscores
     names(ab) <- gsub(' ', '_', names(ab))
-    # Specify which are overtime
-    names(ab)[8:10] <- paste0('overtime_', names(ab)[8:10])
+    # # Specify which are overtime
+    # names(ab)[8:10] <- paste0('overtime_', names(ab)[8:10])
     
     # workers  ---------------
     # Lower case all
@@ -111,10 +102,10 @@ if('read_in_finished.RData' %in% dir(data_dir)){
     names(workers) <- gsub(' ', '_', names(workers))
     # Remove double underscores 
     names(workers) <- gsub('__', '_', names(workers))
-    # Add the meta-column names (had to look at spreadsheet for this)
-    names(workers)[97] <- paste0('driver_license_', names(workers)[97])
-    names(workers)[99] <- paste0('passport_', names(workers)[99])
-    
+    # # Add the meta-column names (had to look at spreadsheet for this)
+    # names(workers)[97] <- paste0('driver_license_', names(workers)[97])
+    # names(workers)[99] <- paste0('passport_', names(workers)[99])
+    # 
     ##### CLEAN UP DATE OBJECTS
     
     # ab ---------------
