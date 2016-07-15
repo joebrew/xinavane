@@ -269,7 +269,13 @@ census_manhica <-
 # Join the censuses
 census <- rbind(census_manhica, census_magude)
 
+
+# DONE
+
+plot(census$x, census$y, col = ifelse(census$geo == 'Magude', 'red', 'blue'), pch = '.')
+
 # 
+
 x <- 
   df %>%
   group_by(month_start) %>%
