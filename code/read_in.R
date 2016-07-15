@@ -13,116 +13,13 @@ library(Hmisc)
 
 ##### FUNCTIONS
 source(paste0(root_dir, '/lib/helpers.R'))
+source(paste0(root_dir, '/lib/read_final_data.R'))
+
 
 ##### READ IN DATA
 if('read_in_finished.RData' %in% dir(data_dir)){
   load(paste0(data_dir, '/read_in_finished.RData'))
 } else {
-  
-  # setwd(data_dir)
-
-  # Define function to read in data
-  reader <- function(worker_type = 'agriculture'){
-    
-    # Alter the worker type for reading in absenteeism data
-    wt <- ifelse(worker_type == 'agriculture',
-                 'Agric',
-                 ifelse(worker_type == 'factory',
-                        'Factory',
-                        'Gen Serv'))
-    
-    # Alter the worker type for reading in general data
-    wtg <- 
-      ifelse(worker_type == 'agriculture', 'Agriculture',
-             ifelse(worker_type == 'factory', 'Factory',
-                    'Gen Services'))
-    
-      # General absteneeism data
-    all_ab <- 
-      read_excel(paste0(
-        'data/Final data/',
-        'Gen Absenteeism_',
-        wt, 
-        '_1 jan 2015 to 5 jul 2016.xls'),
-        skip = 1)
-
-    # Remove duplicates
-    all_ab <- all_ab[!duplicated(all_ab),]
-    
-    # Sickness-specific absenteeism data
-    sick_ab <- 
-      read_excel(paste0(
-        'data/Final data/',
-        'Sickness_',
-        wt, 
-        '_1 jan 2015 to 5 jul 2016.xls'),
-        skip = 1)
-
-    sick_ab <- sick_ab[!duplicated(sick_ab),]
-    
-    # Worker data
-    workers <- 
-      read_excel(paste0(
-        'data/Final data/Planilha Trabalhadores - ',
-        wtg,
-        '.xls'),
-        skip = 1)
-
-    workers <- workers[!duplicated(workers),]
-    workers$worker_type <- worker_type
-    
-    ##### COMBINE ABSENCE DATA (for simplicity's sake)
-    # Note: these are mutually exclusive datasets - just need to stack on top of one another
-    all_ab$type <- 'healthy'
-    sick_ab$type <- 'sick'
-    ab <- rbind(all_ab, sick_ab); rm (all_ab, sick_ab)
-    ab$worker_type <- worker_type
-    
-    ##### MANUALLY CLEAN UP COLUMN NAMES
-    # ab ---------------
-    # Lower case all
-    names(ab) <- tolower(names(ab))
-    # Remove trailing/leading whitespace
-    names(ab) <- gsub("^\\s+|\\s+$", "", names(ab))
-    # Spaces to underscores
-    names(ab) <- gsub(' ', '_', names(ab))
-    # # Specify which are overtime
-    # names(ab)[8:10] <- paste0('overtime_', names(ab)[8:10])
-    
-    # workers  ---------------
-    # Lower case all
-    names(workers) <- tolower(names(workers))
-    # Remove periods
-    names(workers) <- gsub('.', '_', names(workers), fixed = TRUE)
-    # Replace slashes
-    names(workers) <- gsub('/', '_', names(workers), fixed = TRUE)
-    # Remove trailing/leading whitespace
-    names(workers) <- gsub("^\\s+|\\s+$", "", names(workers))
-    # Spaces to underscores
-    names(workers) <- gsub(' ', '_', names(workers))
-    # Remove double underscores 
-    names(workers) <- gsub('__', '_', names(workers))
-    # # Add the meta-column names (had to look at spreadsheet for this)
-    # names(workers)[97] <- paste0('driver_license_', names(workers)[97])
-    # names(workers)[99] <- paste0('passport_', names(workers)[99])
-    # 
-    ##### CLEAN UP DATE OBJECTS
-    
-    # ab ---------------
-    ab$date <- as.Date(ab$date, format = '%m/%d/%Y')
-    
-    # workers ---------------
-    workers$date_of_birth <- as.Date(workers$date_of_birth, format = '%m/%d/%Y')
-    workers$company_entry_date <- as.Date(workers$company_entry_date, format = '%d/%m/%Y')
-    
-    ##### CONVERT EVERYTHING TO REGULAR DATAFRAMES
-    ab <- data.frame(ab)
-    workers <- data.frame(workers)
-    
-    ##### ASSIGN TO GLOBAL ENVIRONMENT
-    return(list(ab, workers))
-  }
-  
   # Run list for all three worker types
   worker_types <- c('agriculture', 
                     'factory',
@@ -132,7 +29,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   for (wt in 1:length(worker_types)){
     this_type <- worker_types[wt]
     message('Working on : ', this_type )
-    x <- reader(worker_type = this_type)
+    x <- read_final_data(worker_type = this_type)
     master_ab[[wt]] <- x[[1]]
     master_workers[[wt]] <- x[[2]]
   }
@@ -149,12 +46,81 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   workers <- workers[,!flags]
   rm(flags, j)
   
-  # ISSUE WITH NUMBER OF WORKERS / REPEAT ROWS 
-  # !!! NEED TO ADDRESS
   # For now, just removing duplicates
   workers <- workers[!duplicated(workers$id_number),]
   setwd(root_dir)
   rm(x)
+  
+  # NEED TO REMOVE WORKERS OUTSIDE OF OUR TIME PERIOD
+
+  # Create a dataframe of eligible absences
+  x <- expand.grid(
+    date = seq(min(ab$date, na.rm = TRUE),
+               max(ab$date, na.rm = TRUE),
+               by = 1),
+    number = unique(workers$number))
+  
+  # Get start and end dates
+  x <- left_join(x = x,
+                 y = workers %>%
+                   dplyr::select(number,
+                                 company_entry_date,
+                                 last_paid))
+  
+  # Remove those with no number or no company entry or last paid dates
+  x <- x %>%
+    filter(!is.na(date),
+           !is.na(number),
+           !is.na(company_entry_date),
+           !is.na(last_paid))
+  
+  # Remove those workers who hadn't yet started
+  x <- x %>%
+    dplyr::filter(date >= company_entry_date)
+  
+  # Remove those who are no longer working
+  x <- x %>%
+    dplyr::filter(date <= last_paid)
+  
+  # Get day of week
+  x$dow <- weekdays(x$date)
+  
+  # Remove those dates for which the worker has off
+  # Do this differentially for those that have 6 days off vs. 5
+  # and this with "None selected" vs an actual day selected.
+  x <- left_join(x = x,
+                 y = workers %>%
+                   dplyr::select(number, days_off),
+                 by = c("number")) %>%
+    # Mark "non selected" as Sunday
+    mutate(days_off = ifelse(days_off == 'None selected',
+                             'Sunday',
+                             days_off)) %>%
+    filter(!dow %in% days_off)
+  
+  # x is now a dataframe containg all
+  # unique worker-days for which a worker
+  # SHOULD have worked
+  
+  # Now we need to bring absences into x
+  x <- x %>%
+    left_join(ab %>%
+                mutate(absence = TRUE) %>%
+                dplyr::select(number, type, date, absence)) %>%
+    mutate(absence = ifelse(is.na(absence), FALSE, absence))
+  
+  # Join worker data to our absence/eligibility dataframe
+  df <- x %>%
+    left_join(workers %>%
+                dplyr::select(#-days_off, 
+                  -last_paid,
+                              -company_entry_date, 
+                              -type)
+              )
+  
+  # # See absences
+  # x = df %>% filter(days_off == 'None selected' & days_wk == 6) %>% group_by(absence, dow) %>% tally
+  
   ##### SAVE IMAGE
   save.image(paste0(data_dir, '/read_in_finished.RData'))
 }

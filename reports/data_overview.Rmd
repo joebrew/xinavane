@@ -98,48 +98,6 @@ To account for the above issues, we can instead calculate an _absenteeism rate_,
 
 ```{r}
 
-# Create a dataframe of eligible absences
-x <- expand.grid(
-  date = seq(min(ab$date, na.rm = TRUE),
-             max(ab$date, na.rm = TRUE),
-             by = 1),
-  number = unique(workers$number))
-# Get day of week
-x$dow <- weekdays(x$date)
-
-# Remove those dates for which the worker has off
-x <- left_join(x = x,
-               y = workers %>%
-                 dplyr::select(number, days_off),
-               by = c("number")) %>%
-  filter(dow != days_off)
-
-# Get start and  dates
-x <- left_join(x = x,
-               y = workers %>%
-                 dplyr::select(number,
-                               company_entry_date))
-
-# Remove those workers who hadn't yet started
-x <- x %>%
-  dplyr::filter(date >= company_entry_date)
-
-# x is now a dataframe containg all
-# unique worker-days for which a worker
-# SHOULD have worked
-
-# Now we need to bring absences into x
-x <- x %>%
-  left_join(ab %>%
-              mutate(absence = TRUE) %>%
-              dplyr::select(number, type, date, absence)) %>%
-  mutate(absence = ifelse(is.na(absence), FALSE, absence))
-
-# Join worker data to our absence/eligibility dataframe
-df <- x %>%
-  left_join(workers %>%
-              dplyr::select(-days_off, -company_entry_date, -type))
-
 # # Write spreadsheets for laia (requested on 2016-04-13)
 # if(!dir.exists('~/Desktop/magude')){
 #   dir.create('~/Desktop/magude')
