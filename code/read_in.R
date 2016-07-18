@@ -14,6 +14,7 @@ library(Hmisc)
 ##### FUNCTIONS
 source(paste0(root_dir, '/lib/helpers.R'))
 source(paste0(root_dir, '/lib/read_final_data.R'))
+source(paste0(root_dir, '/lib/read_final_data_2.R'))
 
 
 ##### READ IN DATA
@@ -29,7 +30,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   for (wt in 1:length(worker_types)){
     this_type <- worker_types[wt]
     message('Working on : ', this_type )
-    x <- read_final_data(worker_type = this_type)
+    x <- read_final_data_2(worker_type = this_type)
     master_ab[[wt]] <- x[[1]]
     master_workers[[wt]] <- x[[2]]
   }
@@ -197,6 +198,10 @@ if('read_in_finished.RData' %in% dir(data_dir)){
     left_join(workers,
               by = 'number')
   rm(x, x5, x6)
+  
+  # For those with greater than 100% absenteeism,
+  # this means we underestimated their true days at risk. Re-do.  
+# !!!!!!!!!!
   
   # Write dta/csv for elisa
   library(foreign)
