@@ -12,6 +12,7 @@ library(ggplot2)
 library(Hmisc)
 library(sp)
 library(raster)
+library(stringdist)
 
 ##### FUNCTIONS
 source(paste0(root_dir, '/lib/helpers.R'))
@@ -55,7 +56,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   rm(x)
   
   # NEED TO REMOVE WORKERS OUTSIDE OF OUR TIME PERIOD
-
+  
   # Create a dataframe of eligible absences
   x <- expand.grid(
     date = seq(min(ab$date, na.rm = TRUE),
@@ -155,7 +156,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
                   -end_year,
                   -company_entry_date,
                   -last_paid)
-
+  
   # x is now a dataframe containg all
   # unique worker-months with the number of eligible days for work
   
@@ -203,7 +204,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   
   # For those with greater than 100% absenteeism,
   # this means we underestimated their true days at risk. Re-do.  
-# !!!!!!!!!!
+  # !!!!!!!!!!
   
   # # Write dta/csv for elisa
   # library(foreign)
@@ -223,185 +224,293 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   #           address_3,
   #           address_4)
   # write_csv(locations, '~/Desktop/locations_for_laia.csv')
-
+  
+  ######################################################
+  # Bring in census data
+  
+  # Magude  ----------------------------------------------------------
+  load('census/maltem/2016-07-15_HOUSEHOLD.RData')
+  locations_magude <- HOUSEHOLD; rm(HOUSEHOLD)
+  locations_magude$lng <-
+    locations_magude$longitude <-
+    locations_magude$x <-
+    locations_magude$lon <-
+    locations_magude$HOUSEHOLD_HEAD_GPS_LNG
+  locations_magude$lat <-
+    locations_magude$latitude <-
+    locations_magude$y <-
+    locations_magude$HOUSEHOLD_HEAD_GPS_LAT
+  locations_magude$geo <- 'Magude'
+  locations_magude$permid <- locations_magude$HOUSEHOLD_HEAD_PERM_ID
+  locations_magude$house_number <- locations_magude$HOUSEHOLD_HEAD_AGREG_NUM
+  locations_magude <-
+    locations_magude %>% dplyr::select(house_number,
+                                       lng,
+                                       longitude,
+                                       x,
+                                       lon,
+                                       lat,
+                                       latitude,
+                                       y,
+                                       geo)
+  # Also get birthday
+  load('census/maltem/2016-07-15_MEMBER.RData')
+  magude_member <- MEMBER; rm(MEMBER)
+  magude_member <-
+    magude_member %>%
+    dplyr::select(PERM_ID_MEMBER,
+                  BIRTH_MEMBER,
+                  MEMBER_NAME,
+                  HOUSEHOLD_NUMBER) %>%
+    rename(permid = PERM_ID_MEMBER,
+           dob = BIRTH_MEMBER,
+           name = MEMBER_NAME,
+           house_number = HOUSEHOLD_NUMBER) %>%
+    mutate(dob = as.Date(substr(dob, 1, 10)))
+  # Join
+  census_magude <-
+    left_join(x = magude_member,
+              y = locations_magude,
+              by = 'house_number') %>%
+    mutate(geo = 'Magude')
+  rm(magude_member)
+  
+  # Manhica ----------------------------------------------------------
+  load('census/openhds/2016-07-15_individual.RData')
+  individual$dob <- as.Date(individual$dob)
+  individual$house_number <- substr(individual$lastName, 1, 8)
+  individual$name <- individual$firstName
+  individual$permid <- individual$lastName
+  individual <- individual %>%
+    dplyr::select(permid, name, house_number, dob)
+  # Read in coordinates (emailed from Charfudin)
+  coords <- read_csv('census/openhds/Coordenadas.csv')
+  names(coords) <- c('house_number', 'region', 'lat', 'lng')
+  coords$region <- NULL
+  # Combine
+  census_manhica <- left_join(individual,
+                              coords,
+                              by = 'house_number')
+  rm(individual, coords)
+  
+  # Convert census_manhica to lat/lng
+  census_manhica_location <- census_manhica %>% filter(!is.na(lat) & !is.na(lng))
+  census_manhica_no_location <- census_manhica %>% filter(is.na(lat) | is.na(lng))
+  sp::coordinates(census_manhica_location) <- ~lng+lat
+  proj4string(census_manhica_location) <- CRS("+proj=utm +zone=36 +south +ellps=WGS84 +datum=WGS84 +units=m +no_defs")
+  census_manhica_location <- spTransform(census_manhica_location, CRS('+proj=longlat'))
+  # Extract the coordinates
+  ll <- coordinates(census_manhica_location)
+  # Add back into the original dataframe
+  census_manhica_location$x <- ll[,1]
+  census_manhica_location$y <- ll[,2]
+  census_manhica_location <- data.frame(census_manhica_location@data)
+  # change names
+  census_manhica_location <-
+    census_manhica_location %>%
+    rename(lng = x,
+           lat = y)
+  # Combine all of manhica back together
+  census_manhica <-
+    rbind(census_manhica_location,
+          census_manhica_no_location)
+  rm(census_manhica_location, census_manhica_no_location)
+  
+  # Expand coordinates
+  census_manhica$longitude <-
+    census_manhica$x <-
+    census_manhica$lon <-
+    census_manhica$lng
+  census_manhica$latitude <-
+    census_manhica$y <-
+    census_manhica$lat
+  census_manhica$geo <- 'Manhiça'
+  census_manhica <-
+    census_manhica %>%
+    dplyr::select(permid,
+                  dob,
+                  name,
+                  house_number,
+                  lng,
+                  longitude,
+                  x,
+                  lon,
+                  lat,
+                  latitude,
+                  y,
+                  geo)
+  
+  
+  # Join the censuses ----------------------------------------
+  census_magude <- data.frame(census_magude)
+  census_manhica <- data.frame(census_manhica)
+  for (j in 1:ncol(census_manhica)){
+    if(class(census_manhica[,j]) == 'factor'){
+      census_manhica[,j] <- as.character(census_manhica[,j])
+    }
+    if(class(census_magude[,j]) == 'factor'){
+      census_magude[,j] <- as.character(census_magude[,j])
+    }
+  }
+  census <- rbind(census_manhica, census_magude)
+  rm(census_manhica, census_magude)
+  # DONE
+  
+  # Join census to worker data -------------------------------------
+  workers$dob <- workers$date_of_birth
+  workers$name <- toupper(workers$full_name)
+  census$name <- toupper(iconv(enc2utf8(census$name),sub="byte"))
+  # Remove from census anything before the last hyphen (if there are any)
+  keep_last <- function(x){
+    x <- strsplit(x, split = '-')
+    x <- unlist(x[[1]][length(x[[1]])])
+    return(x)
+  }
+  census$name <- ifelse(grepl('[0-9]+', census$name),
+                        keep_last(census$name),
+                        census$name)
+  # Get birth years in both
+  census$birth_year <- NA
+  workers$birth_year <- NA
+  census$birth_year[!is.na(census$dob)] <- 
+    as.numeric(format(census$dob[!is.na(census$dob)], '%Y'))
+  workers$birth_year[!is.na(workers$dob)] <- 
+    as.numeric(format(workers$dob[!is.na(workers$dob)], '%Y'))
+  
+  # census stuff
+  census$name_in_census <- census$name
+  
+  # Attempt to join directly
+  workers <-
+    left_join(x = workers,
+              y = census %>%
+                mutate(perfect_match = TRUE) %>%
+                mutate(same_birthday = TRUE) %>%
+                dplyr::select(permid, dob, name, name_in_census, 
+                              perfect_match, 
+                              same_birthday),
+              by = c('dob', 'name'))
+  workers$perfect_match <-
+    ifelse(is.na(workers$perfect_match), FALSE, workers$perfect_match)
+  
+  # prop.table(table(is.na(x$permid)))
+  
+  # Use string matching with jaro winkler distance
+  workers$score <- NA
+  workers$score[!is.na(workers$permid)] <- 0
+  
+  for (i in which(is.na(workers$permid))){
+    done <- FALSE
+    message(i)
+    # Get the row in question
+    this_row <- workers[i,]
+    # Get all possible matches
+    possibles <- census
+    # Keep only those with the same birth year
+    yob <- this_row$birth_year
+    if(!is.na(yob)){
+      possibles <- possibles %>%
+        filter(birth_year == yob)
+    } else {
+      done <- TRUE
+    }
+    
+    if(!done){
+      # Compute matching of name
+      scores <- stringdist(a = this_row$name, 
+                           b = possibles$name,
+                           method = 'jw')
+      # Narrow down the possibles to keep only those below threshold
+      possibles <- possibles[scores <= 0.2,]
+      # narrow down scores too (in case we need to use them later)
+      scores <- scores[scores <= 0.2]
+      # If there's anything left, keep going
+      if(nrow(possibles) == 0){
+        done <- TRUE
+      }
+      if(!done){
+        # If there is anyone left, see if we can get birthday
+        shared_birthday <- which(possibles$dob == this_row$dob)
+        if(length(shared_birthday) > 0){
+          # narrow down possibles and scores
+          possibles <- possibles[shared_birthday,]
+          scores <- scores[shared_birthday]
+        }
+        # Keep only the best score
+        if(nrow(possibles) > 1){
+          possibles <- possibles[which.min(scores),][1,]
+        } else {
+          done <- TRUE
+        }
+        
+        if(!done){
+          # Register the score and permid
+          workers$score[i] <- min(scores)
+          workers$permid[i] <- possibles$permid
+          workers$name_in_census[i] <- possibles$name_in_census
+          workers$same_birthday[i] <- possibles$dob == workers$dob[i]
+        }
+      }
+    }
+  }
+  
+  # Join census information to workers
+  workers <- 
+    left_join(x = workers,
+              y = census %>%
+                dplyr::select(-name, -birth_year, -name_in_census) %>%
+                rename(dob_in_census = dob),
+              by = 'permid')
+  
   ##### SAVE IMAGE
   save.image(paste0(data_dir, '/read_in_finished.RData'))
 }
 msg('Done reading in and cleaning data.')
 
-# ######################################################
-# # Bring in census data
+
+
+# Peak at results
+x <- workers %>%
+  filter(score > 0.1 & score < 0.15) %>%
+  dplyr::select(name, name_in_census, score,
+                same_birthday)
+# View(head(x, 100))
+
+
+# Plot
+cols <- adjustcolor(ifelse(census$geo == 'Magude', 'darkorange', 'darkred'), alpha.f = 0.1)
+
+plot(census$x,
+     census$y,
+     xlab = 'Longitude',
+     ylab = 'Latitude')
+# Now set the plot region to grey
+rect(par("usr")[1], par("usr")[3], par("usr")[2], par("usr")[4], col =
+       "black")
+
+points(census$x,
+     census$y,
+     col = cols,
+     pch = 16,
+     cex = 0.2)
+title(main = 'Magude and Manhiça residents')
+
+worker_cols <- adjustcolor('blue', alpha.f = 0.5)
+points(workers$x,
+       workers$y,
+       col = worker_cols,
+       pch = 16,
+       cex = 0.2)
+
+# Add xinavane
+xin <- 
+  data.frame(x = 32.6174913,
+             y = -25.0517658)
+points(xin, col = 'white', pch = 16, cex = 2)
+
+# #
 # 
-# # Magude  ----------------------------------------------------------
-# load('census/maltem/2016-07-15_HOUSEHOLD.RData')
-# locations_magude <- HOUSEHOLD; rm(HOUSEHOLD)
-# locations_magude$lng <- 
-#   locations_magude$longitude <-
-#   locations_magude$x <-
-#   locations_magude$lon <-
-#   locations_magude$HOUSEHOLD_HEAD_GPS_LNG
-# locations_magude$lat <- 
-#   locations_magude$latitude <-
-#   locations_magude$y <-
-#   locations_magude$HOUSEHOLD_HEAD_GPS_LAT
-# locations_magude$geo <- 'Magude'
-# locations_magude$permid <- locations_magude$HOUSEHOLD_HEAD_PERM_ID
-# locations_magude$house_number <- locations_magude$HOUSEHOLD_HEAD_AGREG_NUM
-# locations_magude <-
-#   locations_magude %>% dplyr::select(house_number,
-#                                      lng, 
-#                                      longitude,
-#                                      x,
-#                                      lon,
-#                                      lat, 
-#                                      latitude,
-#                                      y,
-#                                      geo)
-# # Also get birthday
-# load('census/maltem/2016-07-15_MEMBER.RData')
-# magude_member <- MEMBER; rm(MEMBER)
-# magude_member <-
-#   magude_member %>%
-#   dplyr::select(PERM_ID_MEMBER,
-#                 BIRTH_MEMBER,
-#                 MEMBER_NAME,
-#                 HOUSEHOLD_NUMBER) %>%
-#   rename(permid = PERM_ID_MEMBER,
-#          dob = BIRTH_MEMBER,
-#          name = MEMBER_NAME,
-#          house_number = HOUSEHOLD_NUMBER) %>%
-#   mutate(dob = as.Date(substr(dob, 1, 10)))
-# # Join 
-# census_magude <-
-#   left_join(x = magude_member,
-#             y = locations_magude,
-#             by = 'house_number') %>%
-#   mutate(geo = 'Magude')
-# rm(magude_member)
-# 
-# # Manhica ----------------------------------------------------------
-# load('census/openhds/2016-07-15_individual.RData')
-# individual$dob <- as.Date(individual$dob)
-# individual$house_number <- substr(individual$lastName, 1, 8)
-# individual$name <- individual$firstName
-# individual$permid <- individual$lastName
-# individual <- individual %>%
-#   dplyr::select(permid, name, house_number, dob)
-# # Read in coordinates (emailed from Charfudin)
-# coords <- read_csv('census/openhds/Coordenadas.csv')
-# names(coords) <- c('house_number', 'region', 'lat', 'lng')
-# coords$region <- NULL
-# # Combine
-# census_manhica <- left_join(individual,
-#                             coords,
-#                             by = 'house_number')
-# rm(individual, coords)
-# 
-# # Convert census_manhica to lat/lng
-# census_manhica_location <- census_manhica %>% filter(!is.na(lat) & !is.na(lng))
-# census_manhica_no_location <- census_manhica %>% filter(is.na(lat) | is.na(lng))
-# sp::coordinates(census_manhica_location) <- ~lng+lat
-# proj4string(census_manhica_location) <- CRS("+proj=utm +zone=36 +south +ellps=WGS84 +datum=WGS84 +units=m +no_defs")
-# census_manhica_location <- spTransform(census_manhica_location, CRS('+proj=longlat'))
-# # Extract the coordinates
-# ll <- coordinates(census_manhica_location)
-# # Add back into the original dataframe
-# census_manhica_location$x <- ll[,1]
-# census_manhica_location$y <- ll[,2]
-# census_manhica_location <- data.frame(census_manhica_location@data)
-# # change names
-# census_manhica_location <-
-#   census_manhica_location %>%
-#   rename(lng = x,
-#          lat = y)
-# # Combine all of manhica back together
-# census_manhica <- 
-#   rbind(census_manhica_location,
-#         census_manhica_no_location)
-# rm(census_manhica_location, census_manhica_no_location)
-# 
-# # Expand coordinates
-# census_manhica$longitude <-
-#   census_manhica$x <-
-#   census_manhica$lon <- 
-#   census_manhica$lng
-# census_manhica$latitude <-
-#   census_manhica$y <-
-#   census_manhica$lat
-# census_manhica$geo <- 'Manhiça'
-# census_manhica <- 
-#   census_manhica %>%
-#   dplyr::select(permid,
-#                 dob,
-#                 name,
-#                 house_number,
-#                 lng, 
-#                 longitude,
-#                 x,
-#                 lon,
-#                 lat, 
-#                 latitude,
-#                 y,
-#                 geo)
-# 
-# 
-# # Join the censuses ----------------------------------------
-# census_magude <- data.frame(census_magude)
-# census_manhica <- data.frame(census_manhica)
-# for (j in 1:ncol(census_manhica)){
-#   if(class(census_manhica[,j]) == 'factor'){
-#     census_manhica[,j] <- as.character(census_manhica[,j])
-#   }
-#   if(class(census_magude[,j]) == 'factor'){
-#     census_magude[,j] <- as.character(census_magude[,j])
-#   }
-# }
-# census <- rbind(census_manhica, census_magude)
-# rm(census_manhica, census_magude)
-# # DONE
-# 
-# # Join census to worker data -------------------------------------
-# workers$dob <- workers$date_of_birth
-# workers$name <- toupper(workers$full_name)
-# census$name <- toupper(iconv(enc2utf8(census$name),sub="byte"))
-# 
-# # Attempt to join directly
-# x <- 
-#   left_join(x = workers,
-#             y = census,
-#             by = c('dob', 'name'))
-# # prop.table(table(is.na(x$geo)))
-# 
-# # Use string matching with jaro winkler distance
-# library(stringdist)
-# matched <- stringsim(a = workers$name[1],
-#           b = census$name[1:1000],
-#           method = 'jw')
-# 
-# # stringdist
-# # stringdistmatrix
-# 
-# # Plot
-# cols <- adjustcolor(ifelse(census$geo == 'Magude', 'red', 'orange'), alpha.f = 0.1)
-# 
-# plot(census$x,
-#      census$y,
-#      xlab = 'Longitude',
-#      ylab = 'Latitude')
-# # Now set the plot region to grey
-# rect(par("usr")[1], par("usr")[3], par("usr")[2], par("usr")[4], col = 
-#        "black")
-# 
-# points(census$x, 
-#      census$y, 
-#      col = cols, 
-#      pch = 16,
-#      cex = 0.2)
-# title(main = 'Magude and Manhiça residents')
-# 
-# # 
-# 
-# x <- 
+# x <-
 #   df %>%
 #   group_by(month_start) %>%
 #   summarise(absences = sum(absences),
