@@ -476,34 +476,34 @@ if('read_in_finished.RData' %in% dir(data_dir)){
       last_name_scores <- stringdist(a = this_row$last_name,
                                      b = possibles$last_name,
                                      method = 'jw')
-      last_name_scores <- ifelse(is.na(last_name_scores), 0.2, last_name_scores)
+      last_name_scores <- ifelse(is.na(last_name_scores), 1, last_name_scores)
       # Compute matching of first name
       first_name_scores <-stringdist(a = this_row$first_name,
                                      b = possibles$first_name,
                                      method = 'jw')
-      first_name_scores <- ifelse(is.na(first_name_scores), 0.2, first_name_scores)
+      first_name_scores <- ifelse(is.na(first_name_scores), 0.5, first_name_scores)
       # Compute matching of middle name
       middle_name_scores <-stringdist(a = this_row$middle_name,
                                      b = possibles$middle_name,
                                      method = 'jw')
-      middle_name_scores <- ifelse(is.na(middle_name_scores), 0.2, middle_name_scores)
+      middle_name_scores <- ifelse(is.na(middle_name_scores), 0, middle_name_scores)
       # Compute birthday scores
       dob_scores <- stringdist(a = this_row$dob,
                                b = possibles$dob,
-                               method = 'lv')
-      dob_scores <- ifelse(is.na(dob_scores), 0.2, dob_scores)
+                               method = 'jw')
+      dob_scores <- ifelse(is.na(dob_scores), 0, dob_scores)
       # Compute sex score
       sex_scores <- ifelse(possibles$gender == this_row$gender,
                            0, 
                            1)
-      sex_scores <- ifelse(is.na(sex_scores), 0.2, sex_scores)
+      sex_scores <- ifelse(is.na(sex_scores), 0, sex_scores)
       # Get overall score
       scores <- 
         (last_name_scores * 0.3) +
-        (first_name_scores * 0.1) +
+        (first_name_scores * 0.2) +
         (middle_name_scores * 0.1) + 
-        (dob_scores * 0.3) +
-        (sex_scores * 0.2)
+        (dob_scores * 0.25) +
+        (sex_scores * 0.15)
       
       # Narrow down the possibles to keep only those below threshold
       possibles <- possibles[scores <= 0.2,]
