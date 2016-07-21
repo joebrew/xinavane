@@ -260,10 +260,12 @@ if('read_in_finished.RData' %in% dir(data_dir)){
     magude_member %>%
     dplyr::select(PERM_ID_MEMBER,
                   BIRTH_MEMBER,
+                  MEMBER_GENDER,
                   MEMBER_NAME,
                   HOUSEHOLD_NUMBER) %>%
     rename(permid = PERM_ID_MEMBER,
            dob = BIRTH_MEMBER,
+           gender = MEMBER_GENDER,
            name = MEMBER_NAME,
            house_number = HOUSEHOLD_NUMBER) %>%
     mutate(dob = as.Date(substr(dob, 1, 10)))
@@ -274,6 +276,13 @@ if('read_in_finished.RData' %in% dir(data_dir)){
               by = 'house_number') %>%
     mutate(geo = 'Magude')
   rm(magude_member)
+  # Recode gender
+  census_magude$gender <-
+    ifelse(census_magude$gender == '1',
+           'male',
+           ifelse(census_magude$gender == '2', 
+                  'female',
+                  NA))
   
   # Manhica ----------------------------------------------------------
   load('census/openhds/2016-07-15_individual.RData')
@@ -282,7 +291,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   individual$name <- individual$firstName
   individual$permid <- individual$lastName
   individual <- individual %>%
-    dplyr::select(permid, name, house_number, dob)
+    dplyr::select(permid, name, house_number, dob, gender)
   # Read in coordinates (emailed from Charfudin)
   coords <- read_csv('census/openhds/Coordenadas.csv')
   names(coords) <- c('house_number', 'region', 'lat', 'lng')
@@ -315,7 +324,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
     rbind(census_manhica_location,
           census_manhica_no_location)
   rm(census_manhica_location, census_manhica_no_location)
-  
+
   # Expand coordinates
   census_manhica$longitude <-
     census_manhica$x <-
@@ -329,6 +338,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
     census_manhica %>%
     dplyr::select(permid,
                   dob,
+                  gender,
                   name,
                   house_number,
                   lng,
@@ -339,6 +349,13 @@ if('read_in_finished.RData' %in% dir(data_dir)){
                   latitude,
                   y,
                   geo)
+  # Recode gender
+  census_manhica$gender <-
+    ifelse(census_manhica$gender == 'F',
+           'female',
+           ifelse(census_manhica$gender == 'M',
+                  'male', 
+                  NA))
   
   
   # Join the censuses ----------------------------------------
@@ -354,12 +371,34 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   }
   census <- rbind(census_manhica, census_magude)
   rm(census_manhica, census_magude)
+  
+
+  
   # DONE
   
   # Join census to worker data -------------------------------------
   workers$dob <- workers$date_of_birth
   workers$name <- toupper(workers$full_name)
   census$name <- toupper(iconv(enc2utf8(census$name),sub="byte"))
+  # Get a last name
+  workers$last_name <- toupper(workers$last_name)
+  census$last_name <-
+    unlist(lapply(strsplit(census$name, ' '), 
+                  function(x){x[length(x)]}))
+  # Get a first name
+  workers$first_name <- 
+    unlist(lapply(strsplit(workers$name, ' '), 
+                  function(x){x[1]}))
+  census$first_name <-
+    unlist(lapply(strsplit(census$name, ' '), 
+                  function(x){x[1]}))
+  # Get a middle name
+  workers$middle_name <- 
+    unlist(lapply(strsplit(workers$name, ' '), 
+                  function(x){x[2]}))
+  census$middle_name <- 
+    unlist(lapply(strsplit(census$name, ' '), 
+                  function(x){x[2]}))
   # Remove from census anything before the last hyphen (if there are any)
   keep_last <- function(x){
     x <- strsplit(x, split = '-')
@@ -370,13 +409,16 @@ if('read_in_finished.RData' %in% dir(data_dir)){
                         keep_last(census$name),
                         census$name)
   # Get birth years in both
-  census$birth_year <- NA
-  workers$birth_year <- NA
+  census$birth_year <- census$birth_month <- NA
+  workers$birth_year <- workers$birth_month <-  NA
   census$birth_year[!is.na(census$dob)] <- 
     as.numeric(format(census$dob[!is.na(census$dob)], '%Y'))
+  census$birth_month[!is.na(census$dob)] <- 
+    as.numeric(format(census$dob[!is.na(census$dob)], '%m'))
   workers$birth_year[!is.na(workers$dob)] <- 
     as.numeric(format(workers$dob[!is.na(workers$dob)], '%Y'))
-  
+  workers$birth_month[!is.na(workers$dob)] <- 
+    as.numeric(format(workers$dob[!is.na(workers$dob)], '%m'))
   # census stuff
   census$name_in_census <- census$name
   
@@ -399,6 +441,11 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   workers$score <- NA
   workers$score[!is.na(workers$permid)] <- 0
   
+  # Add birth month as a condition
+  # Add more strict last name
+  # Allow for more flexibility in abbreviation
+  # Use Laia's recodified locations to improve matching
+  
   for (i in which(is.na(workers$permid))){
     done <- FALSE
     message(i)
@@ -406,20 +453,58 @@ if('read_in_finished.RData' %in% dir(data_dir)){
     this_row <- workers[i,]
     # Get all possible matches
     possibles <- census
-    # Keep only those with the same birth year
-    yob <- this_row$birth_year
-    if(!is.na(yob)){
-      possibles <- possibles %>%
-        filter(birth_year == yob)
-    } else {
-      done <- TRUE
-    }
+    # # Keep only those with the same sex
+    # the_sex <- this_row$gender
+    # if(!is.na(the_sex)){
+    #   possibles <- possibles %>%
+    #     filter(gender == the_sex)
+    # } else {
+    #   # If no gender, then we won't match
+    #   done <- TRUE
+    # }
+    # # Only continue if matchables exist
+    # if(nrow(possibles) == 0){
+    #   done <- TRUE
+    # }
     
     if(!done){
-      # Compute matching of name
-      scores <- stringdist(a = this_row$name, 
-                           b = possibles$name,
-                           method = 'jw')
+      # # Compute matching of name
+      # scores <- stringdist(a = this_row$name, 
+      #                      b = possibles$name,
+      #                      method = 'jw')
+      # Extract last name
+      last_name_scores <- stringdist(a = this_row$last_name,
+                                     b = possibles$last_name,
+                                     method = 'jw')
+      last_name_scores <- ifelse(is.na(last_name_scores), 0.2, last_name_scores)
+      # Compute matching of first name
+      first_name_scores <-stringdist(a = this_row$first_name,
+                                     b = possibles$first_name,
+                                     method = 'jw')
+      first_name_scores <- ifelse(is.na(first_name_scores), 0.2, first_name_scores)
+      # Compute matching of middle name
+      middle_name_scores <-stringdist(a = this_row$middle_name,
+                                     b = possibles$middle_name,
+                                     method = 'jw')
+      middle_name_scores <- ifelse(is.na(middle_name_scores), 0.2, middle_name_scores)
+      # Compute birthday scores
+      dob_scores <- stringdist(a = this_row$dob,
+                               b = possibles$dob,
+                               method = 'lv')
+      dob_scores <- ifelse(is.na(dob_scores), 0.2, dob_scores)
+      # Compute sex score
+      sex_scores <- ifelse(possibles$gender == this_row$gender,
+                           0, 
+                           1)
+      sex_scores <- ifelse(is.na(sex_scores), 0.2, sex_scores)
+      # Get overall score
+      scores <- 
+        (last_name_scores * 0.3) +
+        (first_name_scores * 0.1) +
+        (middle_name_scores * 0.1) + 
+        (dob_scores * 0.3) +
+        (sex_scores * 0.2)
+      
       # Narrow down the possibles to keep only those below threshold
       possibles <- possibles[scores <= 0.2,]
       # narrow down scores too (in case we need to use them later)
@@ -429,30 +514,27 @@ if('read_in_finished.RData' %in% dir(data_dir)){
         done <- TRUE
       }
       if(!done){
-        # If there is anyone left, see if we can get birthday
-        shared_birthday <- which(possibles$dob == this_row$dob)
-        if(length(shared_birthday) > 0){
-          # narrow down possibles and scores
-          possibles <- possibles[shared_birthday,]
-          scores <- scores[shared_birthday]
-        }
+        # # If there is anyone left, see if we can get birthday
+        # shared_birthday <- which(possibles$dob == this_row$dob)
+        # if(length(shared_birthday) > 0){
+        #   # narrow down possibles and scores
+        #   possibles <- possibles[shared_birthday,]
+        #   scores <- scores[shared_birthday]
+        # }
         # Keep only the best score
-        if(nrow(possibles) > 1){
-          possibles <- possibles[which.min(scores),][1,]
-        } else {
-          done <- TRUE
-        }
-        
-        if(!done){
-          # Register the score and permid
-          workers$score[i] <- min(scores)
-          workers$permid[i] <- possibles$permid
-          workers$name_in_census[i] <- possibles$name_in_census
-          workers$same_birthday[i] <- possibles$dob == workers$dob[i]
-        }
+        possibles <- possibles[which.min(scores),][1,]
+        score <- min(scores)
+
+        # Register the score and permid
+        workers$score[i] <- score
+        workers$permid[i] <- possibles$permid
+        workers$name_in_census[i] <- possibles$name_in_census
+        workers$same_birthday[i] <- possibles$dob == workers$dob[i]
       }
     }
   }
+  
+  # Examine results ad throw out those with bad ones
   
   # Join census information to workers
   workers <- 
@@ -483,10 +565,11 @@ cols <- adjustcolor(ifelse(census$geo == 'Magude', 'darkorange', 'darkred'), alp
 plot(census$x,
      census$y,
      xlab = 'Longitude',
-     ylab = 'Latitude')
-# Now set the plot region to grey
-rect(par("usr")[1], par("usr")[3], par("usr")[2], par("usr")[4], col =
-       "black")
+     ylab = 'Latitude',
+     col = NA)
+# # Now set the plot region to grey
+# rect(par("usr")[1], par("usr")[3], par("usr")[2], par("usr")[4], col =
+#        "black")
 
 points(census$x,
      census$y,
@@ -506,8 +589,35 @@ points(workers$x,
 xin <- 
   data.frame(x = 32.6174913,
              y = -25.0517658)
-points(xin, col = 'white', pch = 16, cex = 2)
+points(xin, col = 'white', pch = 21, cex = 1)
 
+library(leaflet)
+man <- workers %>% filter(!is.na(lng),
+                          geo == 'Manhiça')
+mag <- workers %>% filter(!is.na(lng),
+                          geo == 'Magude')
+
+leaflet::leaflet() %>%
+  addProviderTiles("Esri.WorldImagery") %>%
+  addCircleMarkers(lng = man$lng,
+                   lat = man$lat,
+                   fill = TRUE,
+                   fillColor = 'blue',
+                   color = NA,
+                   fillOpacity = 0.3) %>%
+  addCircleMarkers(lng = mag$lng,
+                   lat = mag$lat,
+                   fill = TRUE,
+                   fillColor = 'red',
+                   color = NA,
+                   fillOpacity = 0.3) %>%
+  addPopups(lng = mag$lng,
+            lat = mag$lat,
+            popup = mag$name) %>%
+  addPopups(lng = man$lng,
+            lat = man$lat,
+            popup = man$name)
+  
 # #
 # 
 # x <-
