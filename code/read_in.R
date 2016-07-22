@@ -422,6 +422,11 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   # census stuff
   census$name_in_census <- census$name
   
+  # Keep only individual permids
+  census <- census %>% dplyr::filter(!duplicated(permid))
+  # Keep only individual workers
+  workers <- workers %>% dplyr::filter(!duplicated(id_number));
+  
   # Attempt to join directly
   workers <-
     left_join(x = workers,
@@ -441,6 +446,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   workers$score <- NA
   workers$score[!is.na(workers$permid)] <- 0
   
+  # save.image('~/Desktop/temp.RData')
   # Add birth month as a condition
   # Add more strict last name
   # Allow for more flexibility in abbreviation
@@ -506,9 +512,9 @@ if('read_in_finished.RData' %in% dir(data_dir)){
         (sex_scores * 0.15)
       
       # Narrow down the possibles to keep only those below threshold
-      possibles <- possibles[scores <= 0.2,]
+      possibles <- possibles[scores <= 0.1,]
       # narrow down scores too (in case we need to use them later)
-      scores <- scores[scores <= 0.2]
+      scores <- scores[scores <= 0.1]
       # If there's anything left, keep going
       if(nrow(possibles) == 0){
         done <- TRUE
@@ -535,14 +541,88 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   }
   
   # Examine results ad throw out those with bad ones
+  # Having looked at results, setting threshold at 0.1
+  workers$name_in_census[workers$score > 0.1] <- NA
+  workers$permid[workers$score > 0.1] <- NA
+  workers$same_birthday[workers$score > 0.1] <- NA
+  workers$score[workers$score > 0.1] <- NA
   
   # Join census information to workers
   workers <- 
     left_join(x = workers,
               y = census %>%
-                dplyr::select(-name, -birth_year, -name_in_census) %>%
+                dplyr::select(-name, -birth_year, -name_in_census,
+                              -last_name, -first_name, -middle_name, -birth_month,
+                              -gender) %>%
                 rename(dob_in_census = dob),
               by = 'permid')
+  
+  # Remove garbage
+  workers <- workers %>% filter(!is.na(workers$name))
+  
+  # Read in the locations which laia coded
+  locations <- readxl::read_excel('data/Bairros.xls', sheet = 4)
+  # "Location (1=Manhiça (except Xinavane); 2= Xinavane; 3=Magude)"
+  names(locations)[4] <- 'location_laia'
+  locations$location_laia <- ifelse(locations$location_laia == 1,
+                               'Manhiça',
+                               ifelse(locations$location_laia == 2,
+                                      'Xinavane',
+                                      ifelse(locations$location_laia == 3, 
+                                             'Magude',
+                                             NA)))
+  # "Originally from outside Magude or Manhiça district? (1=yes)" 
+  names(locations)[5] <- 'originally_outside_laia'
+  locations$originally_outside_laia <-
+    ifelse(locations$originally_outside_laia == 1, 
+           TRUE, 
+           FALSE)
+  
+  # Join
+  workers <- left_join(workers,
+                       locations,
+                       by = c('address_1',
+                              'address_2',
+                              'address_3'))
+  
+  
+  # Reformulate df with the new information
+  df <- 
+    df %>%
+    dplyr::select(month_start,
+                  year, 
+                  month,
+                  absences,
+                  sick_absences,
+                  eligibles,
+                  absenteeism_rate,
+                  sick_absenteeism_rate,
+                  last_name,
+                  id_number)
+  df <- df %>%
+    filter(!duplicated(id_number, month_start))
+  workers <- workers %>%
+    dplyr::select(-second_name,
+                  -third_name,
+                  -insurance_1_no_,
+                  -insurance_2_no_,
+                  -insurance_3_no_,
+                  -insurance_4_no_,
+                  -gratuity_entitlement,
+                  -gratuity_payout_date,
+                  -extend_probation,
+                  -on_probation,
+                  -email,
+                  -`actual_bal_`,
+                  -`days_bal_`
+                  -`basic_bal_`,
+                  -expiry_date.1,
+                  -x, -y, -lng, -lat, -lon)
+    df <- 
+      df %>% 
+      left_join(workers,
+              by = 'id_number')
+  
   
   ##### SAVE IMAGE
   save.image(paste0(data_dir, '/read_in_finished.RData'))
