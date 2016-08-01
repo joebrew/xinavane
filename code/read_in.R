@@ -576,13 +576,35 @@ if('read_in_finished.RData' %in% dir(data_dir)){
            FALSE)
   
   # Join
+  locations <- data.frame(locations)
+  address_columns <- c('address_1',
+                       'address_2',
+                       'address_3')
+  for(i in address_columns){
+    locations[,i][locations[,i] == 'NA'] <- NA
+    workers[,i][workers[,i] == 'NA'] <- NA
+    locations[,i][is.na(locations[,i])] <- 'x'
+    workers[,i][is.na(workers[,i])] <- 'x'
+  }
+  workers$ad <- 
+    paste0(workers$address_1, workers$address_2, workers$address_3)
+  locations$ad <- 
+    paste0(locations$address_1, locations$address_2, locations$address_3)
+  # locations <- locations %>%
+  #   dplyr::select(ad, location_laia, originally_outside_laia)
+    locations <- locations[locations$ad %in% unique(workers$ad),]
+  locations$location_laia[is.na(locations$location_laia)] <- ''
+  workers$ad[!workers$ad %in% locations$ad] <- NA
+  locations <- locations[!duplicated(locations$ad),]
+  workers <- workers[!duplicated(workers),]
+  
+  
+  
   workers <- left_join(workers,
                        locations,
-                       by = c('address_1',
-                              'address_2',
-                              'address_3'))
-  
-  
+                       by = 'ad')
+
+  save.image('~/Desktop/tempx.RData')
   # Reformulate df with the new information
   df <- 
     df %>%
@@ -622,13 +644,26 @@ if('read_in_finished.RData' %in% dir(data_dir)){
       left_join(workers,
               by = 'id_number')
   
+    # Convert NAs back to NA
+    df <- data.frame(df)
+    classes <- lapply(df, class)
+    for (j in 1:ncol(df)){
+      print(j)
+      if(classes[j] %in% c('character', 'factor')){
+        df[,j][df[,j] == ''] <- NA
+      }
+    }
+    
   
   ##### SAVE IMAGE
   save.image(paste0(data_dir, '/read_in_finished.RData'))
 }
 msg('Done reading in and cleaning data.')
 
-
+# Write dta and csv
+library(foreign)
+write.dta(df, '~/Desktop/monthly_panel.dta')
+write_csv(df, '~/Desktop/monthly_panel.csv')
 
 # # Peak at results
 # x <- workers %>%
