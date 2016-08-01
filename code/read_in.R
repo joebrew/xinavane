@@ -545,6 +545,8 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   workers$score[workers$score > 0.1] <- NA
   
   # Join census information to workers
+  census <- census %>%
+    filter(!is.na(permid))
   workers <- 
     left_join(x = workers,
               y = census %>%
