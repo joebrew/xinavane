@@ -446,12 +446,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   workers$score <- NA
   workers$score[!is.na(workers$permid)] <- 0
   
-  # save.image('~/Desktop/temp.RData')
-  # Add birth month as a condition
-  # Add more strict last name
-  # Allow for more flexibility in abbreviation
-  # Use Laia's recodified locations to improve matching
-  
+  # MATCHING ---------------------------------------------
   for (i in which(is.na(workers$permid))){
     done <- FALSE
     message(i)
@@ -539,7 +534,9 @@ if('read_in_finished.RData' %in% dir(data_dir)){
       }
     }
   }
-  
+ 
+  save.image('~/Desktop/temp.RData')
+   
   # Examine results ad throw out those with bad ones
   # Having looked at results, setting threshold at 0.1
   workers$name_in_census[workers$score > 0.1] <- NA
@@ -618,6 +615,8 @@ if('read_in_finished.RData' %in% dir(data_dir)){
                   -`basic_bal_`,
                   -expiry_date.1,
                   -x, -y, -lng, -lat, -lon)
+  save.image('~/Desktop/temp2.RData')
+  
     df <- 
       df %>% 
       left_join(workers,
@@ -631,97 +630,97 @@ msg('Done reading in and cleaning data.')
 
 
 
-# Peak at results
-x <- workers %>%
-  filter(score > 0.1 & score < 0.15) %>%
-  dplyr::select(name, name_in_census, score,
-                same_birthday)
-# View(head(x, 100))
-
-
-# Plot
-cols <- adjustcolor(ifelse(census$geo == 'Magude', 'darkorange', 'darkred'), alpha.f = 0.1)
-
-plot(census$x,
-     census$y,
-     xlab = 'Longitude',
-     ylab = 'Latitude',
-     col = NA)
-# # Now set the plot region to grey
-# rect(par("usr")[1], par("usr")[3], par("usr")[2], par("usr")[4], col =
-#        "black")
-
-points(census$x,
-     census$y,
-     col = cols,
-     pch = 16,
-     cex = 0.2)
-title(main = 'Magude and Manhiça residents')
-
-worker_cols <- adjustcolor('blue', alpha.f = 0.5)
-points(workers$x,
-       workers$y,
-       col = worker_cols,
-       pch = 16,
-       cex = 0.2)
-
-# Add xinavane
-xin <- 
-  data.frame(x = 32.6174913,
-             y = -25.0517658)
-points(xin, col = 'white', pch = 21, cex = 1)
-
-library(leaflet)
-man <- workers %>% filter(!is.na(lng),
-                          geo == 'Manhiça')
-mag <- workers %>% filter(!is.na(lng),
-                          geo == 'Magude')
-
-leaflet::leaflet() %>%
-  addProviderTiles("Esri.WorldImagery") %>%
-  addCircleMarkers(lng = man$lng,
-                   lat = man$lat,
-                   fill = TRUE,
-                   fillColor = 'blue',
-                   color = NA,
-                   fillOpacity = 0.3) %>%
-  addCircleMarkers(lng = mag$lng,
-                   lat = mag$lat,
-                   fill = TRUE,
-                   fillColor = 'red',
-                   color = NA,
-                   fillOpacity = 0.3) %>%
-  addPopups(lng = mag$lng,
-            lat = mag$lat,
-            popup = mag$name) %>%
-  addPopups(lng = man$lng,
-            lat = man$lat,
-            popup = man$name)
-  
-# #
+# # Peak at results
+# x <- workers %>%
+#   filter(score > 0.1 & score < 0.15) %>%
+#   dplyr::select(name, name_in_census, score,
+#                 same_birthday)
+# # View(head(x, 100))
 # 
-# x <-
-#   df %>%
-#   group_by(month_start) %>%
-#   summarise(absences = sum(absences),
-#             eligibles = sum(eligibles),
-#             sick_absences = sum(sick_absences)) %>%
-#   mutate(absenteeism_rate = absences / eligibles * 100,
-#          sick_absenteeism_rate = sick_absences / eligibles * 100)
 # 
-# ggplot(data = x) +
-#   geom_bar(aes(x = month_start,
-#                 y = eligibles),
-#            stat = 'identity') +
-#   geom_bar(aes(x = month_start,
-#                 y = absences),
-#            stat = 'identity',
-#             fill = 'red')
+# # Plot
+# cols <- adjustcolor(ifelse(census$geo == 'Magude', 'darkorange', 'darkred'), alpha.f = 0.1)
 # 
-# ggplot(data = x,
-#        aes(x = month_start, y = absenteeism_rate)) +
-#   geom_bar(stat = 'identity')
+# plot(census$x,
+#      census$y,
+#      xlab = 'Longitude',
+#      ylab = 'Latitude',
+#      col = NA)
+# # # Now set the plot region to grey
+# # rect(par("usr")[1], par("usr")[3], par("usr")[2], par("usr")[4], col =
+# #        "black")
 # 
-# ggplot(data = x,
-#        aes(x = month_start, y = sick_absenteeism_rate)) +
-#   geom_bar(stat = 'identity')
+# points(census$x,
+#      census$y,
+#      col = cols,
+#      pch = 16,
+#      cex = 0.2)
+# title(main = 'Magude and Manhiça residents')
+# 
+# worker_cols <- adjustcolor('blue', alpha.f = 0.5)
+# points(workers$x,
+#        workers$y,
+#        col = worker_cols,
+#        pch = 16,
+#        cex = 0.2)
+# 
+# # Add xinavane
+# xin <- 
+#   data.frame(x = 32.6174913,
+#              y = -25.0517658)
+# points(xin, col = 'white', pch = 21, cex = 1)
+# 
+# library(leaflet)
+# man <- workers %>% filter(!is.na(lng),
+#                           geo == 'Manhiça')
+# mag <- workers %>% filter(!is.na(lng),
+#                           geo == 'Magude')
+# 
+# leaflet::leaflet() %>%
+#   addProviderTiles("Esri.WorldImagery") %>%
+#   addCircleMarkers(lng = man$lng,
+#                    lat = man$lat,
+#                    fill = TRUE,
+#                    fillColor = 'blue',
+#                    color = NA,
+#                    fillOpacity = 0.3) %>%
+#   addCircleMarkers(lng = mag$lng,
+#                    lat = mag$lat,
+#                    fill = TRUE,
+#                    fillColor = 'red',
+#                    color = NA,
+#                    fillOpacity = 0.3) %>%
+#   addPopups(lng = mag$lng,
+#             lat = mag$lat,
+#             popup = mag$name) %>%
+#   addPopups(lng = man$lng,
+#             lat = man$lat,
+#             popup = man$name)
+#   
+# # #
+# # 
+# # x <-
+# #   df %>%
+# #   group_by(month_start) %>%
+# #   summarise(absences = sum(absences),
+# #             eligibles = sum(eligibles),
+# #             sick_absences = sum(sick_absences)) %>%
+# #   mutate(absenteeism_rate = absences / eligibles * 100,
+# #          sick_absenteeism_rate = sick_absences / eligibles * 100)
+# # 
+# # ggplot(data = x) +
+# #   geom_bar(aes(x = month_start,
+# #                 y = eligibles),
+# #            stat = 'identity') +
+# #   geom_bar(aes(x = month_start,
+# #                 y = absences),
+# #            stat = 'identity',
+# #             fill = 'red')
+# # 
+# # ggplot(data = x,
+# #        aes(x = month_start, y = absenteeism_rate)) +
+# #   geom_bar(stat = 'identity')
+# # 
+# # ggplot(data = x,
+# #        aes(x = month_start, y = sick_absenteeism_rate)) +
+# #   geom_bar(stat = 'identity')
