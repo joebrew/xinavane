@@ -607,6 +607,19 @@ if('read_in_finished.RData' %in% dir(data_dir)){
                        by = 'ad')
 
   save.image('~/Desktop/tempx.RData')
+  
+  # Bring in worker types and recategorize
+  worker_types <- read_excel('data/Xinavane job title.xlsx',
+                             skip = 1)
+  worker_types <- worker_types %>%
+    dplyr::select(job_title, `new job_title`, `job title list`)
+  names(worker_types) <- 
+    c('job_title',
+      'new_job_title',
+      'job_title_list')
+  workers <- workers %>%
+    left_join(worker_types,
+              by = 'job_title')
   # Reformulate df with the new information
   df <- 
     df %>%
