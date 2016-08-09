@@ -13,6 +13,7 @@ library(Hmisc)
 library(sp)
 library(raster)
 library(stringdist)
+library(rgdal)
 
 ##### FUNCTIONS
 source(paste0(root_dir, '/lib/helpers.R'))
@@ -585,8 +586,8 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   for(i in address_columns){
     locations[,i][locations[,i] == 'NA'] <- NA
     workers[,i][workers[,i] == 'NA'] <- NA
-    locations[,i][is.na(locations[,i])] <- 'x'
-    workers[,i][is.na(workers[,i])] <- 'x'
+    # locations[,i][is.na(locations[,i])] <- 'x'
+    # workers[,i][is.na(workers[,i])] <- 'x'
   }
   workers$ad <- 
     paste0(workers$address_1, workers$address_2, workers$address_3)
@@ -620,6 +621,23 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   workers <- workers %>%
     left_join(worker_types,
               by = 'job_title')
+  
+  # Use the xinavane shapefile to get precise worker location
+  xinavane <- readOGR('geo', 'Xinavane')
+  workers_geo <- workers
+  workers_geo <- workers_geo %>% filter(!is.na(x), !is.na(y))
+  coordinates(workers_geo) <- ~x+y
+  proj4string(workers_geo) <- proj4string(xinavane)
+  x <- over(workers_geo, polygons(xinavane))
+  in_xinavane <- data.frame(in_xinavane = x == 1 & !is.na(x),
+                            id_number = workers_geo$id_number)
+  in_xinavane <- in_xinavane[!duplicated(in_xinavane$id_number),]
+  workers <- workers %>%
+    left_join(in_xinavane, 
+              by = 'id_number')
+  workers$geo <-
+    ifelse(workers$in_xinavane, 'Xinavane', workers$geo)
+  
   # Reformulate df with the new information
   df <- 
     df %>%
@@ -651,7 +669,16 @@ if('read_in_finished.RData' %in% dir(data_dir)){
                   -`days_bal_`
                   -`basic_bal_`,
                   -expiry_date.1,
-                  -x, -y, -lng, -lat, -lon)
+                  -x, -y, -lng, -lat, -lon,
+                  -in_xinavane)
+  workers <-
+    workers %>%
+    dplyr::select(-address_1.y,
+                  -address_2.y,
+                  -address_3.y,
+                  -address_1.x,
+                  -address_2.x,
+                  -address_3.x)
   save.image('~/Desktop/temp2.RData')
   
     df <- 
