@@ -610,17 +610,29 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   save.image('~/Desktop/tempx.RData')
   
   # Bring in worker types and recategorize
-  worker_types <- read_excel('data/Xinavane job title.xlsx',
-                             skip = 1)
+  worker_categories <-
+    c('Agriculture',
+      'Factory',
+      'General Services')
+  worker_list <- list()
+  for (i in 1:length(worker_categories)){
+    temp <- read_excel('data/Xinavane job title.xlsx',
+                       sheet = worker_categories[i],
+                       skip = 1)
+    temp$worker_type <- tolower(worker_categories[i])
+    worker_list[[i]] <- temp
+  }
+  worker_types <- do.call('rbind', worker_list)
   worker_types <- worker_types %>%
-    dplyr::select(job_title, `new job_title`, `job title list`)
+    dplyr::select(job_title, `new job_title`, worker_type)
   names(worker_types) <- 
     c('job_title',
       'new_job_title',
-      'job_title_list')
+      'worker_type')
   workers <- workers %>%
     left_join(worker_types,
-              by = 'job_title')
+              by = c('job_title',
+                     'worker_type'))
   
   # Use the xinavane shapefile to get precise worker location
   xinavane <- readOGR('geo', 'Xinavane')
