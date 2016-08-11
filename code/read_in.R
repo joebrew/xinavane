@@ -609,26 +609,46 @@ if('read_in_finished.RData' %in% dir(data_dir)){
 
   save.image('~/Desktop/tempx.RData')
   
-  # Bring in worker types and recategorize
-  worker_categories <-
-    c('Agriculture',
-      'Factory',
-      'General Services')
-  worker_list <- list()
-  for (i in 1:length(worker_categories)){
-    temp <- read_excel('data/Xinavane job title.xlsx',
-                       sheet = worker_categories[i],
-                       skip = 1)
-    temp$worker_type <- tolower(worker_categories[i])
-    worker_list[[i]] <- temp
-  }
-  worker_types <- do.call('rbind', worker_list)
-  worker_types <- worker_types %>%
-    dplyr::select(job_title, `new job_title`, worker_type)
-  names(worker_types) <- 
-    c('job_title',
-      'new_job_title',
-      'worker_type')
+  # # Bring in worker types and recategorize
+  # worker_categories <-
+  #   c('Agriculture',
+  #     'Factory',
+  #     'General Services')
+  # worker_list <- list()
+  # for (i in 1:length(worker_categories)){
+  #   temp <- read_excel('data/Xinavane job title.xlsx',
+  #                      sheet = worker_categories[i],
+  #                      skip = 1)
+  #   temp$worker_type <- tolower(worker_categories[i])
+  #   worker_list[[i]] <- temp
+  # }
+  # worker_types <- do.call('rbind', worker_list)
+  # worker_types <- worker_types %>%
+  #   dplyr::select(job_title, `new job_title`, worker_type)
+  # names(worker_types) <- 
+  #   c('job_title',
+  #     'new_job_title',
+  #     'worker_type')
+  # worker_types <- read_excel('data/worker_types_match_10_aug.xlsx')
+  worker_types <- read.csv('data/worker_types_match_10_aug.csv')
+  worker_types <- worker_types[,1:4]
+  worker_types <-
+    worker_types %>%
+    dplyr::select(worker_type, job_title, new_job_title)
+
+  # Deal with the character encoding issue
+  x <- data.frame(workers = sort(unique(workers$job_title)),
+                  worker_types = sort(unique(worker_types$job_title)))
+  workers <- left_join(x = workers,
+                       y = x,
+                       by = c('job_title' = 'workers'))
+  rm(x)
+  workers <- workers %>%
+    dplyr::select(-job_title) 
+  workers <- workers %>%
+    dplyr::rename(job_title = worker_types) 
+  
+  # Merge
   workers <- workers %>%
     left_join(worker_types,
               by = c('job_title',
