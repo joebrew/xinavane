@@ -577,6 +577,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
     ifelse(locations$originally_outside_laia == 1, 
            TRUE, 
            FALSE)
+  locations$originally_outside_laia[is.na(locations$originally_outside_laia)] <- FALSE
   
   # Join
   locations <- data.frame(locations)
@@ -604,7 +605,8 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   
   
   workers <- left_join(workers,
-                       locations,
+                       locations %>%
+                         dplyr::select(ad, location_laia, originally_outside_laia),
                        by = 'ad')
 
   save.image('~/Desktop/tempx.RData')
@@ -667,8 +669,9 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   workers <- workers %>%
     left_join(in_xinavane, 
               by = 'id_number')
-  workers$geo <-
-    ifelse(workers$in_xinavane, 'Xinavane', workers$geo)
+  workers$geo <- ifelse(workers$in_xinavane,
+                        'Xinavane',
+                        workers$geo)
   
   # Reformulate df with the new information
   df <- 
