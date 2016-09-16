@@ -209,8 +209,8 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   
   # # Write dta/csv for elisa
   # library(foreign)
-  # write.dta(df, '~/Desktop/monthly_panel.dta')
-  # write_csv(df, '~/Desktop/monthly_panel.csv')
+  # write.dta(df, 'monthly_panel.dta')
+  # write_csv(df, 'monthly_panel.csv')
   # 
   # # Write locations for laia
   # locations <- workers %>%
@@ -224,7 +224,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   #           address_2,
   #           address_3,
   #           address_4)
-  # write_csv(locations, '~/Desktop/locations_for_laia.csv')
+  # write_csv(locations, 'locations_for_laia.csv')
   
   ######################################################
   # Bring in census data
@@ -536,7 +536,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
     }
   }
  
-  save.image('~/Desktop/temp.RData')
+  save.image('temp.RData')
    
   # Examine results ad throw out those with bad ones
   # Having looked at results, setting threshold at 0.1
@@ -609,7 +609,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
                          dplyr::select(ad, location_laia, originally_outside_laia),
                        by = 'ad')
 
-  save.image('~/Desktop/tempx.RData')
+  save.image('tempx.RData')
   
   # # Bring in worker types and recategorize
   # worker_categories <-
@@ -714,7 +714,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
                   -address_1.x,
                   -address_2.x,
                   -address_3.x)
-  save.image('~/Desktop/temp2.RData')
+  save.image('temp2.RData')
   
     df <- 
       df %>% 
@@ -737,11 +737,11 @@ if('read_in_finished.RData' %in% dir(data_dir)){
 }
 msg('Done reading in and cleaning data.')
 
-# Write dta and csv
-library(foreign)
-write.dta(df, '~/Desktop/monthly_panel.dta')
-write_csv(df, '~/Desktop/monthly_panel.csv')
-
+# # Write dta and csv
+# library(foreign)
+# write.dta(df, 'monthly_panel.dta')
+# write_csv(df, 'monthly_panel.csv')
+# 
 # # Peak at results
 # x <- workers %>%
 #   filter(score > 0.1 & score < 0.15) %>%
@@ -776,41 +776,58 @@ write_csv(df, '~/Desktop/monthly_panel.csv')
 #        pch = 16,
 #        cex = 0.2)
 # 
-# # Add xinavane
-# xin <- 
-#   data.frame(x = 32.6174913,
-#              y = -25.0517658)
-# points(xin, col = 'white', pch = 21, cex = 1)
+# # Add xinavane factory
+# xin <-
+#   data.frame(x = 32.8022838,
+#              y = -25.043155)
+# 
+# points(xin, 
+#        col = adjustcolor('blue',
+#                               alpha.f = 0.3), 
+#        pch = 16, 
+#        cex = 2)
+# 
+# # Add xinavane district
+# plot(xinavane, add = TRUE,
+#      col = adjustcolor('black', alpha.f = 0.3))
+# 
 # 
 # library(leaflet)
-# man <- workers %>% filter(!is.na(lng),
-#                           geo == 'Manhiça')
-# mag <- workers %>% filter(!is.na(lng),
+# man <- workers %>% filter(!is.na(longitude),
+#                           geo == 'Manhiça') 
+# man <- man[1:500,]
+# mag <- workers %>% filter(!is.na(longitude),
 #                           geo == 'Magude')
+# mag <- mag[1:500,]
 # 
-# leaflet::leaflet() %>%
+# leaflet::leaflet(xinavane) %>%
 #   addProviderTiles("Esri.WorldImagery") %>%
-#   addCircleMarkers(lng = man$lng,
-#                    lat = man$lat,
+#   addPolygons(color = 'red') %>%
+#   addCircles(data = xin,
+#              lng = xin$x,
+#              lat = xin$y,
+#              fill = TRUE) %>%
+#   addCircleMarkers(lng = man$longitude,
+#                    lat = man$latitude,
 #                    fill = TRUE,
 #                    fillColor = 'blue',
 #                    color = NA,
 #                    fillOpacity = 0.3) %>%
-#   addCircleMarkers(lng = mag$lng,
-#                    lat = mag$lat,
+#   addCircleMarkers(lng = mag$longitude,
+#                    lat = mag$latitude,
 #                    fill = TRUE,
 #                    fillColor = 'red',
 #                    color = NA,
 #                    fillOpacity = 0.3) %>%
-#   addPopups(lng = mag$lng,
-#             lat = mag$lat,
+#   addPopups(lng = mag$longitude,
+#             lat = mag$latitude,
 #             popup = mag$name) %>%
-#   addPopups(lng = man$lng,
-#             lat = man$lat,
+#   addPopups(lng = man$longitude,
+#             lat = man$latitude,
 #             popup = man$name)
-#   
+# 
 # # #
-# # 
+# #
 # # x <-
 # #   df %>%
 # #   group_by(month_start) %>%
@@ -819,7 +836,7 @@ write_csv(df, '~/Desktop/monthly_panel.csv')
 # #             sick_absences = sum(sick_absences)) %>%
 # #   mutate(absenteeism_rate = absences / eligibles * 100,
 # #          sick_absenteeism_rate = sick_absences / eligibles * 100)
-# # 
+# #
 # # ggplot(data = x) +
 # #   geom_bar(aes(x = month_start,
 # #                 y = eligibles),
@@ -828,11 +845,11 @@ write_csv(df, '~/Desktop/monthly_panel.csv')
 # #                 y = absences),
 # #            stat = 'identity',
 # #             fill = 'red')
-# # 
+# #
 # # ggplot(data = x,
 # #        aes(x = month_start, y = absenteeism_rate)) +
 # #   geom_bar(stat = 'identity')
-# # 
+# #
 # # ggplot(data = x,
 # #        aes(x = month_start, y = sick_absenteeism_rate)) +
 # #   geom_bar(stat = 'identity')
