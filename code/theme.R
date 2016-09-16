@@ -1,6 +1,6 @@
 
 theme_xinavane <- 
-  function(base_size = 8, base_family = "Arial") {
+  function(base_family = "Arial") {
     require(RColorBrewer)
     
     # Generate the colors for the chart procedurally with RColorBrewer
@@ -14,7 +14,7 @@ theme_xinavane <-
     color_title = palette[9]
     
     # Begin construction of chart
-    theme_bw(base_size=base_size) +
+    theme_bw() +
       
       # Set the entire chart region to seasheel
       theme(panel.background=element_rect(fill=color_background, 
@@ -33,26 +33,20 @@ theme_xinavane <-
       # theme(legend.position="none") +
       theme(legend.background = element_rect(fill=color_background)) +
       theme(legend.text = element_text(family = base_family,
-                                       size=base_size * 0.7,
                                        color=color_axis_title)) +
       
       # Set title and axis labels, and format these and tick marks
       theme(plot.title=element_text(family = base_family,
                                     color=color_title, 
-                                    size=base_size*1.2, 
                                     vjust=1.25)) +
       theme(axis.text.x=element_text(family = base_family,
-                                     size=base_size * 0.8,
                                      color=color_axis_text)) +
       theme(axis.text.y=element_text(family = base_family,
-                                     size=base_size * 0.8,
                                      color=color_axis_text)) +
       theme(axis.title.x=element_text(family = base_family,
-                                      size=base_size * 0.8,
                                       color=color_axis_title, 
                                       vjust=0)) +
       theme(axis.title.y=element_text(family = base_family,
-                                      size=base_size * 0.8,
                                       color=color_axis_title, 
                                       vjust=1.25)) +
       

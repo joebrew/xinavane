@@ -45,6 +45,7 @@ options(xtable.comment = FALSE)
 ```{r, echo = FALSE, warning = FALSE, message = FALSE, comment = NA, error= FALSE }
 ##### READ IN DATA
 setwd('..')
+source('code/theme.R')
 source('code/read_in.R')
 setwd('reports')
 ```
@@ -445,6 +446,219 @@ ggplot(data = workers[!is.na(workers$marital_status),], aes(marital_status)) +
   ggtitle('Distribution of worker marital status')
 ```
 
+
+# Analysis
+
+## Difference in differences
+
+### Sickness only absenteeism 
+
+```{r}
+did <- 
+  df %>% 
+  filter(month_start >= '2015-04-01',
+         !is.na(location_laia)) %>%
+  mutate(mda = ifelse(month_start >= '2015-12-01', 'Post', 'Pre')) %>%
+  group_by(location_laia, mda) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(absenteeism_rate = absences / eligibles * 100,
+         sickness_absenteeism_rate = sick_absences / eligibles * 100) %>%
+  mutate(mda_num = ifelse(mda == 'Pre', 1, 2))
+
+did$mda <- factor(did$mda, levels = c('Pre', 'Post'))
+
+cols <- colorRampPalette(brewer.pal(n = 9, 'Set1'))(length(unique(did$location_laia)))
+ggplot(data = did,
+       aes(x = mda,
+           y = sickness_absenteeism_rate,
+           color = location_laia,
+           group = location_laia)) +
+  geom_line() +
+  geom_point() +
+  geom_label(aes(label = round(sickness_absenteeism_rate, digits = 3))) +
+  theme_xinavane() +
+  xlab('Time') +
+  ylab('Absenteeism rate') +
+  ggtitle('Sickness only absenteeism rate: before and after',
+          'Using company-based residential location data') +
+  scale_color_manual(name = 'Location',
+                     values = cols)
+
+# Standardize scale to start
+did <- did %>%
+  arrange(mda) %>%
+  group_by(location_laia) %>%
+  mutate(standardized = sickness_absenteeism_rate / first(sickness_absenteeism_rate) * 100)
+
+ggplot(data = did,
+       aes(x = mda,
+           y = standardized,
+           color = location_laia,
+           group = location_laia)) +
+  geom_line() +
+  geom_point() +
+  geom_label(aes(label = round(standardized, digits = 3))) +
+  theme_xinavane() +
+  xlab('Time') +
+  ylab('Absenteeism rate') +
+  ggtitle('Relative scaled sickness only absenteeism rate: before and after',
+          'Using company-based residential location data') +
+  scale_color_manual(name = 'Location',
+                     values = cols)
+
+# Standardize / absolute scaling 
+did <- did %>%
+  arrange(mda) %>%
+  group_by(location_laia) %>%
+  mutate(standardized = sickness_absenteeism_rate - first(sickness_absenteeism_rate))
+
+ggplot(data = did,
+       aes(x = mda,
+           y = standardized,
+           color = location_laia,
+           group = location_laia)) +
+  geom_line() +
+  geom_point() +
+  geom_label(aes(label = round(standardized, digits = 3))) +
+  theme_xinavane() +
+  xlab('Time') +
+  ylab('Absenteeism rate') +
+  ggtitle('Absolute scaled sickness only absenteeism rate: before and after',
+          'Using company-based residential location data') +
+  scale_color_manual(name = 'Location',
+                     values = cols)
+```
+
+
+# All absenteeism
+
+```{r}
+did <- 
+  df %>% 
+  filter(month_start >= '2015-04-01',
+         !is.na(location_laia)) %>%
+  mutate(mda = ifelse(month_start >= '2015-12-01', 'Post', 'Pre')) %>%
+  group_by(location_laia, mda) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(absenteeism_rate = absences / eligibles * 100,
+         sickness_absenteeism_rate = sick_absences / eligibles * 100) %>%
+  mutate(mda_num = ifelse(mda == 'Pre', 1, 2))
+
+did$mda <- factor(did$mda, levels = c('Pre', 'Post'))
+
+cols <- colorRampPalette(brewer.pal(n = 9, 'Set1'))(length(unique(did$location_laia)))
+ggplot(data = did,
+       aes(x = mda,
+           y = absenteeism_rate,
+           color = location_laia,
+           group = location_laia)) +
+  geom_line() +
+  geom_point() +
+  geom_label(aes(label = round(absenteeism_rate, digits = 3))) +
+  theme_xinavane() +
+  xlab('Time') +
+  ylab('Absenteeism rate') +
+  ggtitle('All absenteeism rate: before and after',
+          'Using company-based residential location data') +
+  scale_color_manual(name = 'Location',
+                     values = cols)
+
+# Standardize scale to start
+did <- did %>%
+  arrange(mda) %>%
+  group_by(location_laia) %>%
+  mutate(standardized = absenteeism_rate / first(absenteeism_rate) * 100)
+
+ggplot(data = did,
+       aes(x = mda,
+           y = standardized,
+           color = location_laia,
+           group = location_laia)) +
+  geom_line() +
+  geom_point() +
+  geom_label(aes(label = round(standardized, digits = 3))) +
+  theme_xinavane() +
+  xlab('Time') +
+  ylab('Absenteeism rate') +
+  ggtitle('Relative scaled all absenteeism rate: before and after',
+          'Using company-based residential location data') +
+  scale_color_manual(name = 'Location',
+                     values = cols)
+
+# Standardize / absolute scaling 
+did <- did %>%
+  arrange(mda) %>%
+  group_by(location_laia) %>%
+  mutate(standardized = absenteeism_rate - first(absenteeism_rate))
+
+ggplot(data = did,
+       aes(x = mda,
+           y = standardized,
+           color = location_laia,
+           group = location_laia)) +
+  geom_line() +
+  geom_point() +
+  geom_label(aes(label = round(standardized, digits = 3))) +
+  theme_xinavane() +
+  xlab('Time') +
+  ylab('Absenteeism rate') +
+  ggtitle('Absolute scaled all absenteeism rate: before and after',
+          'Using company-based residential location data') +
+  scale_color_manual(name = 'Location',
+                     values = cols)
+```
+
+## Model
+
+```{r}
+model_data <-   df %>% 
+  filter(month_start >= '2015-04-01',
+         !is.na(location_laia)) %>%
+  mutate(mda = ifelse(month_start >= '2015-12-01', 'Post', 'Pre')) %>%
+  mutate(location = ifelse(location_laia != 'Manhiça', 'MDA zone', location_laia)) %>%
+  filter(!is.na(absences), !is.na(eligibles)) %>% 
+  mutate(eligibles = ifelse(absences > eligibles, absences, eligibles)) %>%
+  mutate(presences = round(eligibles) - absences)
+# Change up the levels
+model_data$mda <- factor(model_data$mda,
+                         levels = c('Pre', 'Post'))
+fit <- glm(cbind(absences, presences) ~ location*mda,
+           data = model_data,
+           family = binomial('logit'))
+coefs <- exp(coef(fit))
+cis <- exp(confint(fit))
+
+# Make a dataframe of results
+ors <- data.frame(characteristic = names(coefs),
+                  coefficient = coefs,
+                  lwr = cis[,1],
+                  upr = cis[,2])
+row.names(ors) <- NULL
+ors$characteristic <- gsub('location|mda', '', ors$characteristic)
+names(ors) <- toupper(names(ors))
+
+ggplot(data = ors,
+       aes(x = CHARACTERISTIC,
+           y = COEFFICIENT)) +
+  geom_point(pch = '-', size = 10) +
+  geom_linerange(aes(ymax = UPR,
+                    ymin = LWR)) +
+  theme_xinavane() +
+  ggtitle('Odds ratios for absence',
+          'April 2015 to April 2016') +
+  xlab('') +
+  geom_label(aes(y = COEFFICIENT - 0.3,
+                   label = paste0(round(COEFFICIENT, digits = 3),
+                                  '\n',
+                                  round(LWR, digits = 3),
+                                  '-',
+                                  round(UPR, digits = 3)))) +
+  ylim(-0.5, 1.5)
+```
 
 # Details  
 
