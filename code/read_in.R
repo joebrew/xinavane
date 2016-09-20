@@ -40,7 +40,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   }
   ab <- do.call('rbind', master_ab)
   workers <- do.call('rbind', master_workers)
-  
+
   ##### GET RID OF EMPTY COLUMNS
   flags <- rep(FALSE, ncol(workers))
   for (j in 1:ncol(workers)){
@@ -49,10 +49,10 @@ if('read_in_finished.RData' %in% dir(data_dir)){
     }
   }
   workers <- workers[,!flags]
-  rm(flags, j)
+  rm(flags, j, master_workers)
   
   # For now, just removing duplicates
-  workers <- workers[!duplicated(workers$id_number),]
+  workers <- workers[!duplicated(workers$number),]
   setwd(root_dir)
   rm(x)
   
@@ -134,7 +134,9 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   
   # Get the company entry date and start date
   x <- 
-    x %>%
+    x %>% 
+    mutate(month = format(date, '%m'),
+           year = format(date, '%Y')) %>%
     left_join(workers %>%
                 dplyr::select(number,
                               company_entry_date,
@@ -154,9 +156,8 @@ if('read_in_finished.RData' %in% dir(data_dir)){
                   -start_month,
                   -start_year,
                   -end_month,
-                  -end_year,
-                  -company_entry_date,
-                  -last_paid)
+                  -end_year)
+  x <- x[,!grepl('company_entry|last_paid', names(x))]
   
   # x is now a dataframe containg all
   # unique worker-months with the number of eligible days for work
@@ -202,10 +203,6 @@ if('read_in_finished.RData' %in% dir(data_dir)){
     left_join(workers,
               by = 'number')
   rm(x, x5, x6)
-  
-  # For those with greater than 100% absenteeism,
-  # this means we underestimated their true days at risk. Re-do.  
-  # !!!!!!!!!!
   
   # # Write dta/csv for elisa
   # library(foreign)
@@ -426,7 +423,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   # Keep only individual permids
   census <- census %>% dplyr::filter(!duplicated(permid))
   # Keep only individual workers
-  workers <- workers %>% dplyr::filter(!duplicated(id_number));
+  workers <- workers %>% dplyr::filter(!duplicated(number));
   
   # Attempt to join directly
   workers <-
@@ -664,11 +661,11 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   proj4string(workers_geo) <- proj4string(xinavane)
   x <- over(workers_geo, polygons(xinavane))
   in_xinavane <- data.frame(in_xinavane = x == 1 & !is.na(x),
-                            id_number = workers_geo$id_number)
-  in_xinavane <- in_xinavane[!duplicated(in_xinavane$id_number),]
+                            number = workers_geo$number)
+  in_xinavane <- in_xinavane[!duplicated(in_xinavane$number),]
   workers <- workers %>%
     left_join(in_xinavane, 
-              by = 'id_number')
+              by = 'number')
   workers$geo <- ifelse(workers$in_xinavane,
                         'Xinavane',
                         workers$geo)
@@ -685,9 +682,9 @@ if('read_in_finished.RData' %in% dir(data_dir)){
                   absenteeism_rate,
                   sick_absenteeism_rate,
                   last_name,
-                  id_number)
+                  number)
   df <- df %>%
-    filter(!duplicated(id_number, month_start))
+    filter(!duplicated(number, month_start))
   workers <- workers %>%
     dplyr::select(-second_name,
                   -third_name,
@@ -719,7 +716,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
     df <- 
       df %>% 
       left_join(workers,
-              by = 'id_number')
+              by = 'number')
   
     # Convert NAs back to NA
     df <- data.frame(df)
@@ -750,6 +747,8 @@ if('read_in_finished.RData' %in% dir(data_dir)){
                                         'Empregados'),
                     'permanent',
                     'other'))
+    
+    # Remove sensitive variables
   
   ##### SAVE IMAGE
   save.image(paste0(data_dir, '/read_in_finished.RData'))
@@ -758,7 +757,7 @@ msg('Done reading in and cleaning data.')
 
 # # Write dta and csv
 library(foreign)
-write.dta(df, 'xinavane_monthly_panel_2016-09-14.dta')
+write.dta(df, 'xinavane_monthly_panel_2016-09-20.dta')
 # write_csv(df, 'monthly_panel.csv')
 # 
 # # Peak at results
