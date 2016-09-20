@@ -209,7 +209,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   
   # # Write dta/csv for elisa
   # library(foreign)
-  # write.dta(df, 'monthly_panel.dta')
+  # write.dta(df, 'xinavane_monthly_panel_2014-2016.dta')
   # write_csv(df, 'monthly_panel.csv')
   # 
   # # Write locations for laia
@@ -731,6 +731,25 @@ if('read_in_finished.RData' %in% dir(data_dir)){
       }
     }
     
+    # Fix worker new_job_title spacing
+    workers$new_job_title <- as.character(workers$new_job_title)
+    workers$new_job_title <-
+      ifelse(grepl('supervisor', workers$new_job_title),
+             'supervisor',
+             workers$new_job_title)
+    
+    # Create a variable for permanent vs. temporary workers
+    workers$temporary_or_permanent <- as.character(NA)
+    workers$temporary_or_permanent <- 
+      ifelse(workers$type %in% c('Apprentice',
+                                 'Eventual',
+                                 'Estagiário'),
+             'temporary',
+             ifelse(workers$type %in% c('Contract',
+                                        'Efectivo',
+                                        'Empregados'),
+                    'permanent',
+                    'other'))
   
   ##### SAVE IMAGE
   save.image(paste0(data_dir, '/read_in_finished.RData'))
@@ -738,8 +757,8 @@ if('read_in_finished.RData' %in% dir(data_dir)){
 msg('Done reading in and cleaning data.')
 
 # # Write dta and csv
-# library(foreign)
-# write.dta(df, 'monthly_panel.dta')
+library(foreign)
+write.dta(df, 'xinavane_monthly_panel_2016-09-14.dta')
 # write_csv(df, 'monthly_panel.csv')
 # 
 # # Peak at results
