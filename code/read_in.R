@@ -534,6 +534,14 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   }
  
   save.image('temp.RData')
+  x <- workers %>%
+    dplyr::select(id_number,
+                  number,
+                  score,
+                  permid,
+                  name_in_census,
+                  same_birthday)
+  save(x, file = 'workers_post_matching.RData')
    
   # Examine results ad throw out those with bad ones
   # Having looked at results, setting threshold at 0.1
@@ -635,9 +643,15 @@ if('read_in_finished.RData' %in% dir(data_dir)){
     worker_types %>%
     dplyr::select(worker_type, job_title, new_job_title)
 
-  # Deal with the character encoding issue
+  # Deal with the character encoding issue by finding the most similar one
+  x <- data.frame(workers = sort(unique(workers$job_title)),
+                  worker_types = NA)
+  worker_scores <- adist(x = sort(unique(workers$job_title)),
+                         y = sort(unique(worker_types$job_title)))
   x <- data.frame(workers = sort(unique(workers$job_title)),
                   worker_types = sort(unique(worker_types$job_title)))
+  indices <- apply(worker_scores, 1, function(z){which.min(z)})
+  x$worker_types <- sort(unique(worker_types$job_title))[indices]
   workers <- left_join(x = workers,
                        y = x,
                        by = c('job_title' = 'workers'))
@@ -712,7 +726,74 @@ if('read_in_finished.RData' %in% dir(data_dir)){
                   -address_2.x,
                   -address_3.x)
   save.image('temp2.RData')
+
+  # Adjust for estimated denominator (ie, >100% or <0% absences)
+  df$eligibles <- ifelse(df$absenteeism_rate > 100,
+                         df$absences,
+                         df$eligibles)
+  df$absenteeism_rate <- df$absences / df$eligibles * 100
   
+  # Fix worker new_job_title spacing
+  workers$new_job_title <- as.character(workers$new_job_title)
+  workers$new_job_title <-
+    ifelse(grepl('supervisor', workers$new_job_title),
+           'supervisor',
+           workers$new_job_title)
+  
+  # Create a variable for permanent vs. temporary workers
+  workers$temporary_or_permanent <- as.character(NA)
+  workers$temporary_or_permanent <- 
+    ifelse(workers$type %in% c('Apprentice',
+                               'Eventual',
+                               'Estagiário'),
+           'temporary',
+           ifelse(workers$type %in% c('Contract',
+                                      'Efectivo',
+                                      'Empregados'),
+                  'permanent',
+                  'other'))
+  # Remove sensitive variables
+  workers <- 
+    workers %>%
+    dplyr::select(number,
+                  date_of_birth,
+                  category,
+                  gender,
+                  marital_status,
+                  isactive,
+                  type,
+                  job_description,
+                  home_location,
+                  hrs_day,
+                  days_wk,
+                  team,
+                  grade,
+                  shift_worker,
+                  shift_type,
+                  activity_group,
+                  pay_group,
+                  contract_count,
+                  rate,
+                  salaried,
+                  pay_method,
+                  income,
+                  paid_in_kind,
+                  paygrp_days,
+                  worker_type,
+                  permid,
+                  perfect_match,
+                  score,
+                  dob_in_census,
+                  longitude,
+                  latitude,
+                  geo,
+                  ad,
+                  location_laia,
+                  originally_outside_laia,
+                  job_title,
+                  new_job_title,
+                  temporary_or_permanent)
+
     df <- 
       df %>% 
       left_join(workers,
@@ -727,28 +808,6 @@ if('read_in_finished.RData' %in% dir(data_dir)){
         df[,j][df[,j] == ''] <- NA
       }
     }
-    
-    # Fix worker new_job_title spacing
-    workers$new_job_title <- as.character(workers$new_job_title)
-    workers$new_job_title <-
-      ifelse(grepl('supervisor', workers$new_job_title),
-             'supervisor',
-             workers$new_job_title)
-    
-    # Create a variable for permanent vs. temporary workers
-    workers$temporary_or_permanent <- as.character(NA)
-    workers$temporary_or_permanent <- 
-      ifelse(workers$type %in% c('Apprentice',
-                                 'Eventual',
-                                 'Estagiário'),
-             'temporary',
-             ifelse(workers$type %in% c('Contract',
-                                        'Efectivo',
-                                        'Empregados'),
-                    'permanent',
-                    'other'))
-    
-    # Remove sensitive variables
   
   ##### SAVE IMAGE
   save.image(paste0(data_dir, '/read_in_finished.RData'))
@@ -756,9 +815,11 @@ if('read_in_finished.RData' %in% dir(data_dir)){
 msg('Done reading in and cleaning data.')
 
 # # Write dta and csv
+recent <- df %>%
+  filter(month_start >= '2014-01-01')
 library(foreign)
-write.dta(df, 'xinavane_monthly_panel_2016-09-20.dta')
-# write_csv(df, 'monthly_panel.csv')
+write.dta(recent, 'xinavane_monthly_panel_2014-2016_only_2016-09-21.dta')
+write_csv(recent, 'xinavane_monthly_panel_2014-2016_only_2016-09-21.csv')
 # 
 # # Peak at results
 # x <- workers %>%
