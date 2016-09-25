@@ -794,6 +794,10 @@ if('read_in_finished.RData' %in% dir(data_dir)){
                   new_job_title,
                   temporary_or_permanent)
 
+  # Remove duplicates
+  workers <- workers %>%
+    filter(!duplicated(number))
+
     df <- 
       df %>% 
       left_join(workers,
@@ -818,8 +822,8 @@ msg('Done reading in and cleaning data.')
 recent <- df %>%
   filter(month_start >= '2014-01-01')
 library(foreign)
-write.dta(recent, 'xinavane_monthly_panel_2014-2016_only_2016-09-21.dta')
-write_csv(recent, 'xinavane_monthly_panel_2014-2016_only_2016-09-21.csv')
+write.dta(recent, 'xinavane_monthly_panel_2014-2016_only_2016-09-25.dta')
+write_csv(recent, 'xinavane_monthly_panel_2014-2016_only_2016-09-25.csv')
 # 
 # # Peak at results
 # x <- workers %>%
