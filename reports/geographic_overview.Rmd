@@ -1,0 +1,291 @@
+---
+title: "Xinavane geographical data overview"
+author: 
+  - Laia Cirera
+  - Joe Brew
+  - Elisa Sicuri  
+date: "August 1, 2016"
+output:
+  pdf_document:
+    includes:
+      in_header: mystyle.sty
+tables: yes
+latex_engine: xelatex
+highlight: zenburn
+toc: yes
+fig_width: 4
+fig_height: 2.6
+header-includes:
+     - \usepackage{longtable}
+---
+
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, comment = NA, error= FALSE }
+# No scientific notation
+options(scipen=999)
+
+##### PACKAGES
+library(knitr)
+library(png)
+library(grid)
+library(extrafont)
+library(gridExtra)
+library(ggmap)
+library(raster)
+library(tidyr)
+library(RColorBrewer)
+library(xtable)
+library(leaflet)
+library(DT)
+loadfonts(device = 'postscript', quiet = TRUE)
+
+# BASIC KNITR OPTIONS
+opts_chunk$set(comment = NA, echo = FALSE, warning = FALSE, message = FALSE)
+options(xtable.comment = FALSE)
+```
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, comment = NA, error= FALSE }
+##### READ IN DATA
+setwd('..')
+source('code/read_in.R')
+setwd('reports')
+
+# Get shapefiles
+moz <- getData(name = 'GADM', country = 'MOZ', level = 2)
+
+# Divide into magude and manhica districts
+man <- moz[moz@data$NAME_2 == 'Manhiça',]
+mag <- moz[moz@data$NAME_2 == 'Magude',]
+```
+
+
+\newpage
+
+
+# Introduction
+
+This document gives an overview of our method(s) for estimating the residential locations of Xinavane employees
+
+# Strategy
+
+We employ two different strategies for determining the residential location of employees. 
+
+
+## 1. Fuzzy matching algorithm
+
+Our first strategy utilizes "approximate string matching" (ie, "fuzzy" matching) in order to match Xinavane workers with their respective entries in the census database. Fields taken into account are names, sex, and date of birth. 
+
+For all matches (except for sex, which is hard-coded as a simple binary), we used Jaro-Winkler distance, which measures dissimilarity between strings.  In taking into consideration the different JW scores for each attribute, we use a weighted approach:
+
+- Last name: 30%
+- Fist name: 20%
+- Middle name: 10%
+- Date of birth: 25%
+- Sex: 15%
+
+This method has the advantage of utilizing the wealth of previously existent information (census) in order to discover more about workers. Additionally, the geographical granularity of correctly matched observations is much higher than the simple village/town level.
+
+However, "fuzzy" matching has disadvantages. In order to determine what constitutes a match, we had to define a (somewhat arbitrary) threshold. This means that both (a) some non-matches are considered matches even though they refer to two different people (ie, those with similar names and birthdays) and (b) some matches are missed due to data entry mistakes or dissimilarities in naming schemes. Finally, and importantly for this study, this method completely _misses_ all those who aren't in the census. 
+
+## 2. Manual recoding
+
+Manual recoding was also carried out. Though less sophisticated than approximate string matching, manual recoding has the advantage of being able to generate location information even for those who are unable to be matched with census data (ie, those with inconsistent naming patterns, etc., or those who are not residents of Manhiça or Magude).  
+
+For manual recoding, we manually went through the more than 2,000 unique address combinations in the Xinavane worker data, and compared with the geographic area data maintained by the CISM. Each location entry was assigned to either Manhiça, Magude, or Xinavane. This method lacks granularity, but has the advantage of being human-checked, and is less contingent on arbitrary cut-offs.
+
+
+# Results
+
+
+
+## 1. Fuzzy matching algorithm
+
+Fuzzy matching relies on pairing name/birthday/sex information from the Xinavane worker data with the geographic information from the census data. It is "fuzzy" in the sense that it attempts to create matches even when the names, birthdays and or/sex are not perfectly matched.
+
+The below map shows the distribution of Manhiça and Magude residents, per the two regions' respective censuses.
+
+
+```{r}
+# Plot
+cols <- adjustcolor(ifelse(census$geo == 'Magude', 'darkorange', 'darkred'), alpha.f = 0.1)
+
+plot(census$x,
+     census$y,
+     xlab = 'Longitude',
+     ylab = 'Latitude',
+     col = NA)
+# # Now set the plot region to grey
+# rect(par("usr")[1], par("usr")[3], par("usr")[2], par("usr")[4], col =
+#        "black")
+
+points(census$x,
+     census$y,
+     col = cols,
+     pch = 16,
+     cex = 0.2)
+title(main = 'Magude and Manhiça residents (census)')
+
+worker_cols <- adjustcolor('blue', alpha.f = 0.5)
+points(workers$x,
+       workers$y,
+       col = worker_cols,
+       pch = 16,
+       cex = 0.2)
+
+# Add xinavane
+xin <-
+  data.frame(x = 32.8022838,
+             y = -25.043155)
+
+points(xin, col = adjustcolor('darkgreen', alpha. = 0.6), pch = 16, cex = 2)
+plot(xinavane, add = TRUE)
+```
+
+
+
+The approximate string matching algorithm immediately identified 6,200 workers (19.6% of the total of 31,620) who were a perfect match (ie, there were observations in the census with identical names, dates of birth and sex). 
+
+An additional 13,407 (42.4%) were identified to be imperfect matches (weighted Jaro-Winkler score of less than 0.1). This brought the total number of workers matched to 19,608 (62.0% of all workers).
+
+
+The below map shows the locations of the 62% of workers who were matched with observations in the census. Coloring reflects district.
+
+```{r}
+man_workers <- workers %>% filter(!is.na(longitude),
+                          geo == 'Manhiça')
+mag_workers <- workers %>% filter(!is.na(longitude),
+                          geo == 'Magude')
+xin_workers <- workers %>% filter(!is.na(longitude),
+                          geo == 'Xinavane')
+
+plot(census$x,
+     census$y,
+     xlab = 'Longitude',
+     ylab = 'Latitude',
+     col = NA,
+     ylim = c(-25.6, -24.2),
+     xlim = c(32, 33.2))
+points(man_workers$longitude,
+       man_workers$latitude,
+       col = 'darkred',
+     pch = 16,
+     cex = 0.2)
+points(mag_workers$longitude,
+       mag_workers$latitude,
+       col = 'darkorange',
+     pch = 16,
+     cex = 0.2)
+points(xin_workers$longitude,
+       xin_workers$latitude,
+       col = 'blue',
+     pch = 16,
+     cex = 0.2)
+title(main = 'Locations of workers (fuzzy matching results)')
+plot(moz, add = T)
+plot(mag, add = TRUE,
+     col = adjustcolor('darkorange', alpha.f = 0.2))
+plot(xinavane, add = T, 
+     col = adjustcolor('blue', alpha.f = 0.2))
+plot(man, add = T,
+     col = adjustcolor('darkred', alpha.f = 0.2))
+points(xin$x, xin$y,
+       pch = '+',
+       col = adjustcolor('darkgreen', alpha.f = 0.7),
+       cex = 2)
+# leaflet::leaflet() %>%
+#   addProviderTiles("Esri.WorldImagery") %>%
+#   addCircleMarkers(lng = man$longitude,
+#                    lat = man$latitude,
+#                    fill = TRUE,
+#                    fillColor = 'blue',
+#                    color = NA,
+#                    fillOpacity = 0.3) %>%
+#   addCircleMarkers(lng = mag$longitude,
+#                    lat = mag$latitude,
+#                    fill = TRUE,
+#                    fillColor = 'red',
+#                    color = NA,
+#                    fillOpacity = 0.3) %>%
+#   addPopups(lng = mag$longitude,
+#             lat = mag$latitude,
+#             popup = mag$name) %>%
+#   addPopups(lng = man$longitude,
+#             lat = man$latitude,
+#             popup = man$name)
+```
+
+Of those matched with census data, the breakdown by area is as follows:
+
+```{r}
+x <- 
+  workers %>% 
+  mutate(geo = ifelse(is.na(geo), 'Not matched', geo)) %>%
+  group_by(geo) %>%
+  tally %>%
+  mutate(p = round(n / sum(n) * 100, digits = 2))
+names(x) <- c('Location', 'Workers', '%')
+knitr::kable(x)
+```
+
+## 2. Manual recoding
+
+The results of manual recoding are below. 
+
+```{r}
+x <- 
+  workers %>% 
+  mutate(location_laia = ifelse(is.na(location_laia)| location_laia == '', 'Not matched', location_laia)) %>%
+  group_by(location = location_laia) %>%
+  tally %>%
+  mutate(p = round(n / sum(n) * 100, digits = 2))
+names(x) <- c('Location', 'Workers', '%')
+knitr::kable(x)
+```
+
+
+```{r, eval = FALSE}
+x <- 
+  workers %>%
+  dplyr::select(number,
+                latitude,
+                longitude, 
+                geo,
+                location_laia) %>%
+  rename(location_fuzzy = geo,
+         location_manual = location_laia,
+         latitude_fuzzy = latitude,
+         longitude_fuzzy = longitude) %>%
+  filter(!is.na(number))
+names(x) <- capitalize(gsub('_', ' ', names(x)))
+DT::datatable(x)
+```
+
+\newpage
+
+# Agreement of methods
+
+Below are two tables (absolute and relative) showing a cross-tabulation between the two methods. The rows are the fuzzy matching algorithm, and the columns pertain to the classifications from the manual recoding. Percentages are by row.
+
+```{r}
+x <- table(ifelse(is.na(workers$geo)|workers$geo == '', 'Not matched',
+                  workers$geo), 
+           ifelse(is.na(workers$location_laia)|workers$location_laia == '', 'Not matched',
+                  workers$location_laia))
+knitr::kable(x)
+knitr::kable(prop.table(x, 1) * 100)
+```
+
+# Details  
+
+All code for the cleaning, analysis and generation of this report are hosted on [Joe Brew's github page](https://github.com/joebrew/xinavane).
+
+******
+
+```{r, fig.height = 2.5}
+barplot(1, border = NA, col = 'white', yaxt = 'n')
+
+
+# ![alt text](../img/is_global.jpg)
+```
+
+

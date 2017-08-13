@@ -824,6 +824,85 @@ recent <- df %>%
 library(foreign)
 write.dta(recent, 'xinavane_monthly_panel_2014-2016_only_2016-09-25.dta')
 write_csv(recent, 'xinavane_monthly_panel_2014-2016_only_2016-09-25.csv')
+
+# 
+# # ANIMATION PLOT
+# source('code/theme.R')
+# the_dates <- sort(unique(df$month_start))
+# xl <- range(the_dates)
+# x <- df %>% 
+#   filter(!is.na(location_laia),
+#          location_laia != 'Xinavane') %>%
+#   mutate(district = location_laia)
+# results_list <- list()
+# dir.create('gifs')
+# for (i in 1:length(the_dates)){
+#   message(i)
+#   file_name <- i
+#   while(nchar(file_name) <3){
+#     file_name <- paste0('0', file_name)
+#   }
+#   this_date <- the_dates[i]
+#   these_data <- x %>%
+#     filter(month_start <= this_date) %>%
+#     group_by(date = month_start, district) %>%
+#     summarise(absences = sum(absences),
+#               eligibles = sum(eligibles)) %>%
+#     ungroup %>%
+#     mutate(absenteeism_rate = absences / eligibles * 100) %>%
+#     mutate(today = date == this_date) %>%
+#     mutate(observation_date = this_date)
+#   results_list[[i]] <- these_data
+#   
+#   png(filename = paste0('gifs/', file_name, '.png'),
+#       width = 680, height = 480)
+#   g <- ggplot(data = these_data,
+#               aes(x = date,
+#                   y = absenteeism_rate,
+#                   color = district)) +
+#     geom_point(alpha = 0.5) +
+#     geom_line(alpha = 0.2) +
+#     geom_smooth() +
+#     xlab('Date') +
+#     ylab('Absenteeism rate') +
+#     theme_xinavane() +
+#     xlab('Date') +
+#     ylab('Absenteeism rate') +
+#     scale_color_manual(name = 'Location',
+#                        values = c('darkorange', 'darkgreen')) +
+#     geom_vline(xintercept = as.numeric(as.Date(c('2015-12-01',
+#                                                  '2016-01-01'))),
+#                alpha = 0.6,
+#                lty = 2) +
+#     xlim(xl) +
+#     ylim(0, 3) +
+#     ggtitle(format(the_dates[i], format = '%B %d, %Y'))
+#   print(g)
+#   dev.off()
+# }
+# results <- do.call('rbind', results_list)
+# g <- ggplot(data = these_data,
+#             aes(x = date,
+#                 y = absenteeism_rate,
+#                 color = district)) +
+#   geom_point(alpha = 0.5) +
+#   geom_line(alpha = 0.2) +
+#   geom_smooth() +
+#   xlab('Date') +
+#   ylab('Absenteeism rate') +
+#   theme_xinavane() +
+#   xlab('Date') +
+#   ylab('Absenteeism rate') +
+#   scale_color_manual(name = 'Location',
+#                      values = c('darkorange', 'darkgreen')) +
+#   geom_vline(xintercept = as.numeric(as.Date(c('2015-12-01',
+#                                                '2016-01-01'))),
+#              alpha = 0.6,
+#              lty = 2) +
+#   xlim(xl) +
+#   ylim(0, 3) +
+#   ggtitle(format(the_dates[i], format = '%B %d, %Y'))
+# print(g)
 # 
 # # Peak at results
 # x <- workers %>%
@@ -911,28 +990,85 @@ write_csv(recent, 'xinavane_monthly_panel_2014-2016_only_2016-09-25.csv')
 # 
 # # #
 # #
-# # x <-
-# #   df %>%
-# #   group_by(month_start) %>%
-# #   summarise(absences = sum(absences),
-# #             eligibles = sum(eligibles),
-# #             sick_absences = sum(sick_absences)) %>%
-# #   mutate(absenteeism_rate = absences / eligibles * 100,
-# #          sick_absenteeism_rate = sick_absences / eligibles * 100)
-# #
-# # ggplot(data = x) +
-# #   geom_bar(aes(x = month_start,
-# #                 y = eligibles),
-# #            stat = 'identity') +
-# #   geom_bar(aes(x = month_start,
-# #                 y = absences),
-# #            stat = 'identity',
-# #             fill = 'red')
-# #
-# # ggplot(data = x,
-# #        aes(x = month_start, y = absenteeism_rate)) +
-# #   geom_bar(stat = 'identity')
-# #
-# # ggplot(data = x,
-# #        aes(x = month_start, y = sick_absenteeism_rate)) +
-# #   geom_bar(stat = 'identity')
+x <-
+  df %>%
+  group_by(month_start) %>%
+  summarise(absences = sum(absences),
+            eligibles = sum(eligibles),
+            sick_absences = sum(sick_absences)) %>%
+  mutate(absenteeism_rate = absences / eligibles * 100,
+         sick_absenteeism_rate = sick_absences / eligibles * 100)
+
+ggplot(data = x) +
+  geom_bar(aes(x = month_start,
+                y = eligibles),
+           stat = 'identity') +
+  geom_bar(aes(x = month_start,
+                y = absences),
+           stat = 'identity',
+            fill = 'red')
+
+ggplot(data = x,
+       aes(x = month_start, y = absenteeism_rate)) +
+  geom_bar(stat = 'identity')
+
+ggplot(data = x,
+       aes(x = month_start, y = sick_absenteeism_rate)) +
+  geom_bar(stat = 'identity')
+
+
+# GIF for person-level worker data
+dir.create('worker_gifs')
+dir.create('worker_gifts_number')
+x <- df %>%
+  mutate(location = ifelse(location_laia == 'Magude',
+                           'Magude',
+                           ifelse(location_laia == 'Manhiça',
+                                  'Manhiça',
+                                  NA))) %>%
+  filter(!is.na(location))
+dates <- sort(unique(x$month_start))
+numbers <- sort(unique(x$number))
+number_numbers <- as.numeric(factor(numbers))
+# dates <- dates[dates >= '2015-01-01']
+for(i in seq(1, max(number_numbers), by = 20)){
+# for (i in dates){
+  
+  message(i)
+  file_name <- i
+  while(nchar(file_name) < 6){
+    file_name <- paste0('0', file_name)
+  }
+    png(filename = paste0('worker_gifts_number/', file_name, '.png'),
+        width = 680, height = 480)
+    
+    sub_data <- x %>% 
+      # filter(month_start <= i) %>%
+      filter(number %in% numbers[1:i])
+
+    g <- ggplot(data = sub_data,
+           aes(x = month_start,
+               y = absenteeism_rate,
+               color = location)) +
+      # geom_jitter(alpha = 0.2) +
+      # geom_smooth(alpha = 0.5) +
+      geom_line(aes(group = number),
+                alpha = 0.7) +
+      xlab('Month') +
+      ylab('Worker-specific absenteeism rate') +
+      scale_color_manual(name = 'Location',
+                         values = c('darkorange', 'darkgreen')) +
+      geom_vline(xintercept = as.numeric(as.Date(c('2015-12-01',
+                                                   '2016-01-01'))),
+                 lty = 2, 
+                 alpha = 0.6) +
+      # scale_y_log10() +
+      theme_xinavane() +
+      ggtitle('Person-level absenteeism',
+              'One-contract workers only') +
+      xlim(dates[1], dates[length(dates)]) +
+      ylim(0, 100)
+      # xlim(dates[1], i)
+    print(g)
+    dev.off()
+}

@@ -55,7 +55,7 @@ setwd('reports')
 # Exploration
 
 ## Absences  
-
+  
 
 Absenteeism data spans from `r format(min(ab$date, na.rm = TRUE), '%B %d, %Y')` until `r format(max(ab$date, na.rm = TRUE), '%B %d, %Y')`. On average, there are `r ab %>% group_by(date) %>% tally %>% summarise(mean(n)) %>% as.numeric() %>% round` absences per day.  Though there appears to be some longer-term variation in the below chart, it's clear that there is annual (and even sub-annual) seasonality.
 
