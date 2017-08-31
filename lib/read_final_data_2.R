@@ -1,6 +1,12 @@
+# # Need old version of readxl for this to work
+# require(devtools)
+# install_version("readxl", version = "0.1.0", repos = "http://cran.us.r-project.org")
+
+
 read_final_data_2 <- function(worker_type = 'agriculture'){
   require(readxl)
   require(readr)
+  require(dplyr)
   
   # Define the names of the different worker types in the files
   wt <- ifelse(worker_type == 'agriculture',
@@ -22,8 +28,34 @@ read_final_data_2 <- function(worker_type = 'agriculture'){
                     wtg,
                     '.csv'),
              skip = 1)
+  workers <- workers[,1:102]
   # workers <- workers[!duplicated(workers),]
+  
+  # Read in more recent worker data --------------------
+  workers_new <- read_excel(paste0('data/dump_2017-08-01/',
+                                   'Employees - ',
+                                   wtg,
+                                   '.xls'),
+                            skip = 1)
+  workers_new <- workers_new[,1:102,]
+
+  # # Prepare for combining
+  workers <- workers[,names(workers) %in% names(workers_new)]
+  workers_new <- workers_new[,names(workers_new) %in% names(workers)]
+  # 
+  # classes_old <- as.character(unlist(lapply(workers, class)))
+  # classes_new <- as.character(unlist(lapply(workers_new, class)))
+  # 
+  # Combine
+  workers <- rbind(workers, 
+             workers_new)
+
   workers$worker_type <- worker_type
+  
+  # Remove duplicates
+  workers <-
+    workers %>%
+    dplyr::filter(!duplicated(`ID Number`))
   
   # Read in absenteeism data -------------------------------
   # General absteneeism data
@@ -40,7 +72,13 @@ read_final_data_2 <- function(worker_type = 'agriculture'){
         'Costs for Activity (FN  (Falta)) at Location Enterprise - ',
         wtg,
         ' for period 1 Jan 2014 to 18 Jul 2016.xls'),
-        skip = 1)
+        skip = 1),
+      read_excel(paste0('data/dump_2017-08-01/',
+                        'Falta- ',
+                        wtg,
+                        ' for period 1 Jul 2016 to 17 Apr 2017.xls'
+                        ),
+                 skip = 1)
     )
     
   # Remove duplicates
@@ -60,7 +98,14 @@ read_final_data_2 <- function(worker_type = 'agriculture'){
         'Costs for Activity (EADor  (Doente)) at Location Enterprise - ',
         wtg, 
         ' for period 1 Jan 2014 to 18 Jul 2016.xls'),
-        skip = 1)
+        skip = 1),
+      read_excel(paste0(
+        'data/dump_2017-08-01/',
+        'Doente - ',
+        wtg,
+        ' for period 1 Jul 2016 to 17 Apr 2017.xls'
+      ),
+      skip = 1)
     )
     
   

@@ -38,7 +38,9 @@ if('read_in_finished.RData' %in% dir(data_dir)){
     master_ab[[wt]] <- x[[1]]
     master_workers[[wt]] <- x[[2]]
   }
-  ab <- do.call('rbind', master_ab)
+  ab <- bind_rows(master_ab)
+  # workers <- bind_rows(master_workers)
+  # ab <- do.call('rbind', master_ab)
   workers <- do.call('rbind', master_workers)
 
   ##### GET RID OF EMPTY COLUMNS
@@ -205,9 +207,9 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   rm(x, x5, x6)
   
   # # Write dta/csv for elisa
-  # library(foreign)
-  # write.dta(df, 'xinavane_monthly_panel_2014-2016.dta')
-  # write_csv(df, 'monthly_panel.csv')
+  library(foreign)
+  write.dta(df, 'xinavane_monthly_panel_2014-2017.dta')
+  write_csv(df, 'monthly_panel.csv')
   # 
   # # Write locations for laia
   # locations <- workers %>%
@@ -822,8 +824,8 @@ msg('Done reading in and cleaning data.')
 recent <- df %>%
   filter(month_start >= '2014-01-01')
 library(foreign)
-write.dta(recent, 'xinavane_monthly_panel_2014-2016_only_2016-09-25.dta')
-write_csv(recent, 'xinavane_monthly_panel_2014-2016_only_2016-09-25.csv')
+write.dta(recent, 'xinavane_monthly_panel_2014-2017_only.dta')
+write_csv(recent, 'xinavane_monthly_panel_2014-2017_only.csv')
 # 
 # # 
 # # # ANIMATION PLOT
