@@ -209,7 +209,7 @@ if('read_in_finished.RData' %in% dir(data_dir)){
   # # Write dta/csv for elisa
   library(foreign)
   write.dta(df, 'xinavane_monthly_panel_2014-2017.dta')
-  write_csv(df, 'monthly_panel.csv')
+  write_csv(df, 'xinavane_monthly_panel_2014-2017.csv')
   # 
   # # Write locations for laia
   # locations <- workers %>%

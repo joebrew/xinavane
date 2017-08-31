@@ -1,0 +1,1235 @@
+---
+title: "Xinavane visualizations"
+author:
+- Joe Brew
+- Laia Cirera
+- Elisa Sicuri
+fig_width: 4
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    theme: yeti
+    toc: yes
+    toc_float: yes
+fig_height: 2.6
+---
+
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, comment = NA, error= FALSE }
+# No scientific notation
+options(scipen=999)
+
+##### PACKAGES
+library(knitr)
+library(png)
+library(grid)
+library(extrafont)
+library(gridExtra)
+library(ggmap)
+library(raster)
+library(tidyr)
+library(RColorBrewer)
+library(xtable)
+library(leaflet)
+library(DT)
+library(ggthemes)
+loadfonts(device = 'postscript', quiet = TRUE)
+
+# BASIC KNITR OPTIONS
+opts_chunk$set(comment = NA, echo = FALSE, warning = FALSE, message = FALSE)
+options(xtable.comment = FALSE)
+```
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, comment = NA, error= FALSE }
+##### READ IN DATA
+setwd('..')
+source('code/read_in.R')
+source('code/theme.R')
+setwd('reports')
+
+
+# Get shapefiles
+moz <- getData(name = 'GADM', country = 'MOZ', level = 2)
+
+# Divide into magude and manhica districts
+man <- moz[moz@data$NAME_2 == 'Manhiça',]
+mag <- moz[moz@data$NAME_2 == 'Magude',]
+```
+
+# Worker details
+
+## By job type
+
+```{r}
+x <-
+  workers %>%
+  group_by(title = new_job_title) %>%
+  tally %>%
+  ungroup %>%
+  arrange(desc(n)) %>%
+  mutate(p = n / sum(n) * 100)
+x$title <- factor(x$title, levels = x$title)
+ggplot(data = x,
+       aes(x = title,
+           y = p)) +
+  geom_bar(stat = 'identity',
+           alpha = 0.6) +
+  theme_economist() +
+  xlab('Job title') +
+  ylab('Workers') +
+  theme(axis.text.x = element_text(angle = 90)) +
+  geom_label(aes(label = round(p, digits = 2))) +
+  ggtitle('Worker job types', 'Entire database')
+```
+
+## By temporary vs permanent status
+
+```{r}
+x <-
+  workers %>%
+  group_by(title = temporary_or_permanent) %>%
+  tally %>%
+  ungroup %>%
+  arrange(desc(n)) %>%
+  mutate(p = n / sum(n) * 100)
+x$title <- factor(x$title, levels = x$title)
+ggplot(data = x,
+       aes(x = title,
+           y = p)) +
+  geom_bar(stat = 'identity',
+           alpha = 0.6) +
+  theme_economist() +
+  xlab('Status') +
+  ylab('Workers') +
+  theme(axis.text.x = element_text(angle = 90)) +
+  geom_label(aes(label = round(p, digits = 2))) +
+  ggtitle('Seasonal vs. permanent workers', 'Entire database')
+```
+
+## By job type AND temporary vs. permanent status
+
+```{r}
+x <-
+  workers %>%
+  group_by(seasonality = temporary_or_permanent,
+           title = new_job_title) %>%
+  tally %>%
+  ungroup %>%
+  arrange(desc(n)) %>%
+  group_by(title) %>%
+  mutate(p = n / sum(n) * 100) %>%
+  ungroup %>%
+  filter(seasonality != 'other')
+# x$title <- factor(x$title, levels = x$title)
+ggplot(data = x,
+       aes(x = title,
+           y = p,
+           group = seasonality,
+           fill = seasonality)) +
+  geom_bar(stat = 'identity',
+           position = 'dodge',
+           alpha = 0.6) +
+  theme_economist() +
+  xlab('Job type') +
+  ylab('Workers') +
+  theme(axis.text.x = element_text(angle = 90)) +
+  # geom_label(aes(label = round(p, digits = 2))) +
+  ggtitle('Job type and seasonality', 'Entire database') +
+  scale_fill_manual(name = '',
+                    values = c('darkred', 'darkorange'))
+```
+
+## By seasonality and place of residence
+
+```{r}
+x <-
+  workers %>%
+  group_by(seasonality = temporary_or_permanent,
+           geo = location_laia) %>%
+  tally %>%
+  ungroup %>%
+  arrange(desc(n)) %>%
+  group_by(geo) %>%
+  mutate(p = n / sum(n) * 100) %>%
+  ungroup %>%
+  filter(geo != '' & !is.na(geo)) %>%
+  filter(seasonality != 'other')
+# x$title <- factor(x$title, levels = x$title)
+ggplot(data = x,
+       aes(x = geo,
+           y = p,
+           group = seasonality,
+           fill = seasonality)) +
+  geom_bar(stat = 'identity',
+           position = 'dodge',
+           alpha = 0.6) +
+  theme_economist() +
+  xlab('Location of residence') +
+  ylab('Workers') +
+  theme(axis.text.x = element_text(angle = 90)) +
+  # geom_label(aes(label = round(p, digits = 2))) +
+  ggtitle('Location of residence and temporary vs. permanent status', 'Entire database') +
+  scale_fill_manual(name = '',
+                    values = c('darkred', 'darkorange'))
+```
+
+## Absenteeism: permanent vs. temporary
+
+
+```{r}
+cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set3'))(2)
+result <-
+  df %>%
+  group_by(month_start, temporary_or_permanent) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(absenteeism_rate = absences / eligibles * 100,
+         sick_absenteeism_rate = sick_absences / eligibles * 100) %>%
+  filter(temporary_or_permanent != 'other') 
+
+g <- 
+  ggplot(data = result,
+         aes(x = month_start,
+             y = absenteeism_rate,
+             group = temporary_or_permanent,
+             color = temporary_or_permanent)) +
+  geom_line(alpha = 0.8, size = 2) +
+    theme_xinavane() +
+    xlab('Date') +
+    ylab('Absenteeism rate') +
+    scale_color_manual(name = 'Seasonality',
+                       values = cols) +
+    ggtitle('Monthly crude absences',
+          'According to company records-based residential locations') +
+  geom_vline(xintercept = as.numeric(as.Date('2015-12-01')),
+             alpha = 0.8,
+             lty = 2)
+print(g)
+max_date <- max(df$month_start, na.rm = TRUE)
+print(g + xlim(max_date - 370, max_date) + ggtitle('Zoom-in of above chart'))
+
+```
+
+## Absenteeism: location and permanent vs. temporary 
+
+```{r}
+cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set1'))(3)
+result <-
+  df %>%
+  group_by(month_start, temporary_or_permanent, geo = location_laia) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(absenteeism_rate = absences / eligibles * 100,
+         sick_absenteeism_rate = sick_absences / eligibles * 100) %>%
+  filter(temporary_or_permanent != 'other',
+         !is.na(geo))
+
+g <- 
+  ggplot(data = result,
+         aes(x = month_start,
+             y = absenteeism_rate,
+             color = geo,
+             lty = temporary_or_permanent,
+             pch = temporary_or_permanent)) +
+  geom_line(alpha = 0.8) +
+  geom_point() +
+    theme_xinavane() +
+    xlab('Date') +
+    ylab('Absenteeism rate') +
+    scale_color_manual(name = 'Location',
+                       values = cols) +
+    ggtitle('Monthly crude absences',
+          'According to company records-based residential locations') +
+  geom_vline(xintercept = as.numeric(as.Date('2015-12-01')),
+             alpha = 0.8,
+             lty = 2)
+print(g)
+max_date <- max(df$month_start, na.rm = TRUE)
+print(g + xlim(max_date - 370, max_date)) #+ ggtitle('Zoom-in of above chart'))
+
+```
+
+
+## Absenteeism:worker type
+
+```{r}
+cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set1'))(2)
+result <-
+  df %>%
+  mutate(job = ifelse(new_job_title == 'operario agricola', 'agriculture', 'other')) %>%
+  group_by(month_start, job) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(absenteeism_rate = absences / eligibles * 100,
+         sick_absenteeism_rate = sick_absences / eligibles * 100) 
+
+g <- 
+  ggplot(data = result,
+         aes(x = month_start,
+             y = absenteeism_rate,
+             color = job,
+             pch = job)) +
+  geom_line(alpha = 0.8) +
+  geom_point() +
+    theme_xinavane() +
+    xlab('Date') +
+    ylab('Absenteeism rate') +
+    scale_color_manual(name = 'Location',
+                       values = cols) +
+    ggtitle('Monthly crude absences',
+          'According to company records-based residential locations') +
+  geom_vline(xintercept = as.numeric(as.Date('2015-12-01')),
+             alpha = 0.8,
+             lty = 2)
+print(g)
+max_date <- max(df$month_start, na.rm = TRUE)
+print(g + xlim(max_date - 730, max_date))# + ggtitle('Zoom-in of above chart'))
+
+```
+
+
+
+## Absenteeism: location and worker type
+
+```{r}
+cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set1'))(3)
+result <-
+  df %>%
+  mutate(job = ifelse(new_job_title == 'operario agricola', 'agriculture', 'other')) %>%
+  group_by(month_start, job = job, geo = location_laia) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(absenteeism_rate = absences / eligibles * 100,
+         sick_absenteeism_rate = sick_absences / eligibles * 100) %>%
+  filter(!is.na(geo)) 
+
+g <- 
+  ggplot(data = result,
+         aes(x = month_start,
+             y = absenteeism_rate,
+             color = geo,
+             lty = job,
+             pch = job)) +
+  geom_line(alpha = 0.8) +
+  geom_point() +
+    theme_xinavane() +
+    xlab('Date') +
+    ylab('Absenteeism rate') +
+    scale_color_manual(name = 'Location',
+                       values = cols) +
+    ggtitle('Monthly crude absences',
+          'According to company records-based residential locations') +
+  geom_vline(xintercept = as.numeric(as.Date('2015-12-01')),
+             alpha = 0.8,
+             lty = 2)
+print(g)
+max_date <- max(df$month_start, na.rm = TRUE)
+print(g + xlim(max_date - 730, max_date))# + ggtitle('Zoom-in of above chart'))
+
+```
+
+# Using days rather than rate
+
+```{r}
+cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set3'))(length(unique(df$geo)))
+result <-
+  df %>%
+  filter(!is.na(location_laia)) %>%
+  group_by(geo = location_laia, month_start) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(absenteeism_rate = absences / eligibles * 100,
+         sick_absenteeism_rate = sick_absences / eligibles * 100)  
+
+g <- 
+  ggplot(data = result,
+         aes(x = month_start,
+             y = absences,
+             group = geo,
+             color = geo)) +
+  geom_line(alpha = 0.8, size = 2) +
+    theme_xinavane() +
+    xlab('Date') +
+    ylab('Absenteeism rate') +
+    scale_color_manual(name = 'Residence',
+                       values = cols) +
+    ggtitle('Monthly crude absences',
+          'According to company records-based residential locations') +
+  geom_vline(xintercept = as.numeric(as.Date('2015-12-01')),
+             alpha = 0.8,
+             lty = 2)
+print(g)
+max_date <- max(df$month_start, na.rm = TRUE)
+print(g + xlim(max_date - 370, max_date))# + ggtitle('Zoom-in of above chart'))
+
+```
+
+# All absenteeism
+
+## Absenteeism over time by place of residence
+
+### Using census-based locations
+
+```{r}
+cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set3'))(length(unique(df$geo)))
+result <-
+  df %>%
+  filter(!is.na(geo)) %>%
+  group_by(geo, month_start) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(absenteeism_rate = absences / eligibles * 100,
+         sick_absenteeism_rate = sick_absences / eligibles * 100)  
+
+g <- 
+  ggplot(data = result,
+         aes(x = month_start,
+             y = absenteeism_rate,
+             group = geo,
+             color = geo)) +
+  geom_line(alpha = 0.8) +
+    theme_xinavane() +
+    xlab('Date') +
+    ylab('Absenteeism rate') +
+    scale_color_manual(name = 'Residence',
+                       values = cols) +
+    ggtitle('Monthly absenteeism rate',
+            'According to census-based residential location') +
+  geom_vline(xintercept = as.numeric(as.Date('2015-12-01')),
+             alpha = 0.8,
+             lty = 2)
+print(g)
+max_date <- max(df$month_start, na.rm = TRUE)
+print(g + xlim(max_date - 370, max_date))# + ggtitle('Zoom-in of above chart'))
+```
+
+Below is a table of the same data.
+
+```{r}
+#DT::datatable(result)
+```
+
+### Using company-based locations
+
+```{r}
+# By laia location
+result <-
+  df %>%
+  filter(!is.na(geo)) %>%
+  group_by(geo = location_laia, month_start) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(absenteeism_rate = absences / eligibles * 100,
+         sick_absenteeism_rate = sick_absences / eligibles * 100) 
+
+g <- ggplot(data = result,
+       aes(x = month_start,
+           y = absenteeism_rate,
+           group = geo,
+           color = geo)) +
+  geom_line(alpha = 0.8) +
+  theme_xinavane() +
+  xlab('Date') +
+  ylab('Absenteeism rate') +
+  geom_vline(xintercept = as.numeric(as.Date('2015-12-01')),
+             alpha = 0.8,
+             lty = 2) +
+  scale_color_manual(name = 'Residence',
+                     values = cols) +
+  ggtitle('Monthly absenteeism rate',
+          'According to company records-based residential locations')
+print(g)
+max_date <- max(df$month_start, na.rm = TRUE)
+print(g + xlim(max_date - 370, max_date))# + ggtitle('Zoom-in of above chart'))
+
+```
+
+
+Below is a table of the same data.
+
+```{r}
+#DT::datatable(result)
+```
+
+
+## Absenteeism over time by place of residence and sex
+
+### Using census-based locations
+
+```{r}
+cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set3'))(length(unique(df$geo)))
+result <-
+  df %>%
+  filter(!is.na(geo)) %>%
+  group_by(geo, gender, month_start) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(absenteeism_rate = absences / eligibles * 100,
+         sick_absenteeism_rate = sick_absences / eligibles * 100)  
+
+g <- 
+  ggplot(data = result,
+         aes(x = month_start,
+             y = absenteeism_rate,
+             color = geo,
+             lty = gender)) +
+  geom_line(alpha = 0.8) +
+    theme_xinavane() +
+    xlab('Date') +
+    ylab('Absenteeism rate') +
+    scale_color_manual(name = 'Residence',
+                       values = cols) +
+    ggtitle('Monthly absenteeism rate',
+            'According to census-based residential location') +
+  geom_vline(xintercept = as.numeric(as.Date('2015-12-01')),
+             alpha = 0.8,
+             lty = 2)
+print(g)
+max_date <- max(df$month_start, na.rm = TRUE)
+print(g + xlim(max_date - 370, max_date))# + ggtitle('Zoom-in of above chart'))
+```
+
+
+Below is a table of the same data.
+
+```{r}
+#DT::datatable(result)
+```
+
+
+### Using company-based locations
+
+```{r}
+# By laia location
+result <-
+  df %>%
+  filter(!is.na(geo)) %>%
+  group_by(geo = location_laia, gender, month_start) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(absenteeism_rate = absences / eligibles * 100,
+         sick_absenteeism_rate = sick_absences / eligibles * 100) 
+
+g <- ggplot(data = result,
+       aes(x = month_start,
+           y = absenteeism_rate,
+           color = geo,
+           lty = gender)) +
+  geom_line(alpha = 0.8) +
+  theme_xinavane() +
+  xlab('Date') +
+  ylab('Absenteeism rate') +
+  geom_vline(xintercept = as.numeric(as.Date('2015-12-01')),
+             alpha = 0.8,
+             lty = 2) +
+  scale_color_manual(name = 'Residence',
+                     values = cols) +
+  ggtitle('Monthly absenteeism rate',
+          'According to company records-based residential locations')
+print(g)
+max_date <- max(df$month_start, na.rm = TRUE)
+print(g + xlim(max_date - 370, max_date) + ylim(0,3))# + ggtitle('Zoom-in of above chart'))
+```
+
+
+Below is a table of the same data.
+
+```{r}
+#DT::datatable(result)
+```
+
+
+## Absenteeism over time by place of residence and seasonal vs. permanent status
+
+Not possible. <2% of all workers are classified as permanent or not; the rest are missing.
+
+## Absenteeism over time by place of residence and worker type
+
+### Using census-based locations
+
+```{r}
+cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set3'))(length(unique(df$geo)))
+result <-
+  df %>%
+  filter(!is.na(geo)) %>%
+  group_by(geo, Type = worker_type, 
+           month_start) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(absenteeism_rate = absences / eligibles * 100,
+         sick_absenteeism_rate = sick_absences / eligibles * 100) 
+
+g <- 
+  ggplot(data = result,
+         aes(x = month_start,
+             y = absenteeism_rate,
+             color = geo,
+             lty = Type)) +
+  geom_line(alpha = 0.8) +
+    theme_xinavane() +
+    xlab('Date') +
+    ylab('Absenteeism rate') +
+    scale_color_manual(name = 'Residence',
+                       values = cols) +
+    ggtitle('Monthly absenteeism rate',
+            'According to census-based residential location') +
+  geom_vline(xintercept = as.numeric(as.Date('2015-12-01')),
+             alpha = 0.8,
+             lty = 2)
+print(g)
+max_date <- max(df$month_start, na.rm = TRUE)
+print(g + xlim(max_date - 370, max_date) + ylim(0,7))# + ggtitle('Zoom-in of above chart'))
+```
+
+
+Below is a table of the same data.
+
+```{r}
+#DT::datatable(result)
+```
+
+
+### Using company-based locations
+
+```{r}
+# By laia location
+result <-
+  df %>%
+  filter(!is.na(geo)) %>%
+  group_by(geo, Type = worker_type,
+           month_start) %>%   
+           summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(absenteeism_rate = absences / eligibles * 100,
+         sick_absenteeism_rate = sick_absences / eligibles * 100)  
+
+g <- ggplot(data = result,
+       aes(x = month_start,
+           y = absenteeism_rate,
+           color = geo,
+           lty = Type)) +
+  geom_line(alpha = 0.8) +
+  theme_xinavane() +
+  xlab('Date') +
+  ylab('Absenteeism rate') +
+  geom_vline(xintercept = as.numeric(as.Date('2015-12-01')),
+             alpha = 0.8,
+             lty = 2) +
+  scale_color_manual(name = 'Residence',
+                     values = cols) +
+  ggtitle('Monthly absenteeism rate',
+          'According to company records-based residential locations')
+print(g)
+max_date <- max(df$month_start, na.rm = TRUE)
+print(g + xlim(max_date - 370, max_date) + ylim(0,7))# + ggtitle('Zoom-in of above chart'))
+```
+
+
+Below is a table of the same data.
+
+```{r}
+#DT::datatable(result)
+```
+
+# Sickness-only absenteeism
+
+What follows are the same charts and tables, but only for sickness-attributible absenteeism.  Note, these data may not be reliable prior to 2014, when it appeared that sickness-attributible absenteeism was significantly lower than it has been for the last 3 years.
+
+```{r}
+result <-
+  df %>%
+  filter(!is.na(geo)) %>%
+  group_by(month_start) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(sickness_absenteeism_rate = absences / eligibles * 100,
+         sick_sickness_absenteeism_rate = sick_absences / eligibles * 100) 
+
+ggplot(data = result,
+       aes(x = month_start,
+           y = sickness_absenteeism_rate)) +
+  geom_area(alpha = 0.8, fill = 'darkgreen') +
+  xlab('Date') +
+  ylab('Absenteeism rate') +
+  ggtitle('Sickness-attributible absenteeism')
+
+```
+
+## Sick absenteeism over time by place of residence
+
+### Using census-based locations
+
+```{r}
+cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set3'))(length(unique(df$geo)))
+result <-
+  df %>%
+  filter(!is.na(geo)) %>%
+  group_by(geo, month_start) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(sickness_absenteeism_rate = absences / eligibles * 100,
+         sick_sickness_absenteeism_rate = sick_absences / eligibles * 100) 
+
+g <- 
+  ggplot(data = result,
+         aes(x = month_start,
+             y = sickness_absenteeism_rate,
+             group = geo,
+             color = geo)) +
+  geom_line(alpha = 0.8) +
+    theme_xinavane() +
+    xlab('Date') +
+    ylab('Absenteeism rate') +
+    scale_color_manual(name = 'Residence',
+                       values = cols) +
+    ggtitle('Monthly sickness absenteeism rate',
+            'According to census-based residential location') +
+  geom_vline(xintercept = as.numeric(as.Date('2015-12-01')),
+             alpha = 0.8,
+             lty = 2)
+print(g)
+max_date <- max(df$month_start, na.rm = TRUE)
+print(g + xlim(max_date - 370, max_date))# + ggtitle('Zoom-in of above chart'))
+```
+
+Below is a table of the same data.
+
+```{r}
+#DT::datatable(result)
+```
+
+### Using company-based locations
+
+```{r}
+# By laia location
+result <-
+  df %>%
+  filter(!is.na(geo)) %>%
+  group_by(geo = location_laia, month_start) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(sickness_absenteeism_rate = absences / eligibles * 100,
+         sick_sickness_absenteeism_rate = sick_absences / eligibles * 100) 
+
+g <- ggplot(data = result,
+       aes(x = month_start,
+           y = sickness_absenteeism_rate,
+           group = geo,
+           color = geo)) +
+  geom_line(alpha = 0.8) +
+  theme_xinavane() +
+  xlab('Date') +
+  ylab('Absenteeism rate') +
+  geom_vline(xintercept = as.numeric(as.Date('2015-12-01')),
+             alpha = 0.8,
+             lty = 2) +
+  scale_color_manual(name = 'Residence',
+                     values = cols) +
+    ggtitle('Monthly sickness absenteeism rate',
+          'According to company records-based residential locations')
+print(g)
+max_date <- max(df$month_start, na.rm = TRUE)
+print(g + xlim(max_date - 370, max_date))# + ggtitle('Zoom-in of above chart'))
+
+```
+
+
+Below is a table of the same data.
+
+```{r}
+#DT::datatable(result)
+```
+
+
+## Absenteeism over time by place of residence and sex
+
+### Using census-based locations
+
+```{r}
+cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set3'))(length(unique(df$geo)))
+result <-
+  df %>%
+  filter(!is.na(geo)) %>%
+  group_by(geo, gender, month_start) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(sickness_absenteeism_rate = absences / eligibles * 100,
+         sick_sickness_absenteeism_rate = sick_absences / eligibles * 100) 
+
+g <- 
+  ggplot(data = result,
+         aes(x = month_start,
+             y = sickness_absenteeism_rate,
+             color = geo,
+             lty = gender)) +
+  geom_line(alpha = 0.8) +
+    theme_xinavane() +
+    xlab('Date') +
+    ylab('Absenteeism rate') +
+    scale_color_manual(name = 'Residence',
+                       values = cols) +
+    ggtitle('Monthly sickness absenteeism rate',
+            'According to census-based residential location') +
+  geom_vline(xintercept = as.numeric(as.Date('2015-12-01')),
+             alpha = 0.8,
+             lty = 2)
+print(g)
+max_date <- max(df$month_start, na.rm = TRUE)
+print(g + xlim(max_date - 370, max_date))# + ggtitle('Zoom-in of above chart'))
+```
+
+
+Below is a table of the same data.
+
+```{r}
+#DT::datatable(result)
+```
+
+
+### Using company-based locations
+
+```{r}
+# By laia location
+result <-
+  df %>%
+  filter(!is.na(geo)) %>%
+  group_by(geo = location_laia, gender, month_start) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(sickness_absenteeism_rate = absences / eligibles * 100,
+         sick_sickness_absenteeism_rate = sick_absences / eligibles * 100) 
+
+g <- ggplot(data = result,
+       aes(x = month_start,
+           y = sickness_absenteeism_rate,
+           color = geo,
+           lty = gender)) +
+  geom_line(alpha = 0.8) +
+  theme_xinavane() +
+  xlab('Date') +
+  ylab('Absenteeism rate') +
+  geom_vline(xintercept = as.numeric(as.Date('2015-12-01')),
+             alpha = 0.8,
+             lty = 2) +
+  scale_color_manual(name = 'Residence',
+                     values = cols) +
+    ggtitle('Monthly sickness absenteeism rate',
+          'According to company records-based residential locations')
+print(g)
+max_date <- max(df$month_start, na.rm = TRUE)
+print(g + xlim(max_date - 370, max_date) + ylim(0,3))# + ggtitle('Zoom-in of above chart'))
+```
+
+
+Below is a table of the same data.
+
+```{r}
+#DT::datatable(result)
+```
+
+
+## Absenteeism over time by place of residence and seasonal vs. permanent status
+
+Not possible. <2% of all workers are classified as permanent or not; the rest are missing.
+
+## Absenteeism over time by place of residence and worker type
+
+### Using census-based locations
+
+```{r}
+cols <- colorRampPalette(brewer.pal(n = 9, name = 'Set3'))(length(unique(df$geo)))
+result <-
+  df %>%
+  filter(!is.na(geo)) %>%
+  group_by(geo, Type = worker_type, 
+           month_start) %>%
+  summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(sickness_absenteeism_rate = absences / eligibles * 100,
+         sick_sickness_absenteeism_rate = sick_absences / eligibles * 100)
+
+g <- 
+  ggplot(data = result,
+         aes(x = month_start,
+             y = sickness_absenteeism_rate,
+             color = geo,
+             lty = Type)) +
+  geom_line(alpha = 0.8) +
+    theme_xinavane() +
+    xlab('Date') +
+    ylab('Absenteeism rate') +
+    scale_color_manual(name = 'Residence',
+                       values = cols) +
+    ggtitle('Monthly sickness absenteeism rate',
+            'According to census-based residential location') +
+  geom_vline(xintercept = as.numeric(as.Date('2015-12-01')),
+             alpha = 0.8,
+             lty = 2)
+print(g)
+max_date <- max(df$month_start, na.rm = TRUE)
+print(g + xlim(max_date - 370, max_date) + ylim(0,7))# + ggtitle('Zoom-in of above chart'))
+```
+
+
+Below is a table of the same data.
+
+```{r}
+#DT::datatable(result)
+```
+
+
+### Using company-based locations
+
+```{r}
+# By laia location
+result <-
+  df %>%
+  filter(!is.na(geo)) %>%
+  group_by(geo, Type = worker_type,
+           month_start) %>%   
+           summarise(absences = sum(absences, na.rm = TRUE),
+            sick_absences = sum(sick_absences, na.rm = TRUE),
+            eligibles = sum(eligibles, na.rm = TRUE)) %>%
+  mutate(sickness_absenteeism_rate = absences / eligibles * 100,
+         sick_sickness_absenteeism_rate = sick_absences / eligibles * 100)
+g <- ggplot(data = result,
+       aes(x = month_start,
+           y = sickness_absenteeism_rate,
+           color = geo,
+           lty = Type)) +
+  geom_line(alpha = 0.8) +
+  theme_xinavane() +
+  xlab('Date') +
+  ylab('Absenteeism rate') +
+  geom_vline(xintercept = as.numeric(as.Date('2015-12-01')),
+             alpha = 0.8,
+             lty = 2) +
+  scale_color_manual(name = 'Residence',
+                     values = cols) +
+    ggtitle('Monthly sickness absenteeism rate',
+          'According to company records-based residential locations')
+print(g)
+max_date <- max(df$month_start, na.rm = TRUE)
+print(g + xlim(max_date - 370, max_date) + ylim(0,7))# + ggtitle('Zoom-in of above chart'))
+```
+
+# Filtering to exclude multi-contract workers
+
+In the below analyses, we filter so as to keep only those workers who had exactly one contract. We do this because we can then use contract start date and contract end date as the _true_ employment period, and we are therefore more confident about these workers' absenteeism.
+
+```{r}
+sub_workers <- 
+  workers %>% 
+  filter(contract_count == 1)
+sub_df <-
+  df %>%
+  filter(contract_count == 1)
+```
+
+After this filter, we are left with `r nrow(sub_workers)` workers (of the original `r nrow(workers)`). Their breakdown by permanent/temporary status is below.
+
+```{r}
+ggplot(data = sub_workers,
+       aes(x = temporary_or_permanent)) +
+  geom_bar(alpha = 0.6) +
+  xlab('Status') +
+  ylab('Number of workers') +
+  theme_xinavane() +
+  ggtitle('Temporary vs. permanent status',
+          'One-contract workers only') 
+```
+
+We can also examine the number of workers under observation at any given time.
+
+```{r}
+x <- sub_df %>%
+  group_by(month_start) %>%
+  tally
+
+ggplot(data = x,
+       aes(x = month_start,
+           y = n)) +
+  geom_area(alpha = 0.6, fill = 'darkblue') +
+  theme_xinavane() +
+  xlab('Date') +
+  ylab('Workers observed') +
+  ggtitle('Number of workers under observation',
+          'One contract only')
+```
+
+# Modeling
+
+```{r}
+model_data <-   sub_df %>% 
+  filter(location_laia != 'Xinavane') %>%
+  filter(month_start >= '2015-01-01',
+         !is.na(location_laia)) %>%
+  mutate(mda = ifelse(month_start >= '2015-12-01', 'Post', 'Pre')) %>%
+  mutate(location = ifelse(location_laia != 'Manhiça', 'MDA zone', location_laia)) %>%
+  filter(!is.na(absences), !is.na(eligibles)) %>% 
+  mutate(eligibles = ifelse(absences > eligibles, absences, eligibles)) %>%
+  mutate(presences = round(eligibles) - absences)
+# Change up the levels
+model_data$mda <- factor(model_data$mda,
+                         levels = c('Pre', 'Post'))
+fit <- glm(cbind(absences, presences) ~ location*mda,
+           data = model_data,
+           family = binomial('logit'))
+coefs <- exp(coef(fit))
+cis <- exp(confint(fit))
+
+
+# Make a dataframe of results
+ors <- data.frame(characteristic = names(coefs),
+                  coefficient = coefs,
+                  lwr = cis[,1],
+                  upr = cis[,2])
+row.names(ors) <- NULL
+ors$characteristic <- gsub('location|mda', '', ors$characteristic)
+names(ors) <- toupper(names(ors))
+
+
+ggplot(data = ors,
+       aes(x = CHARACTERISTIC,
+           y = COEFFICIENT)) +
+  geom_point(pch = '-', size = 10) +
+  geom_linerange(aes(ymax = UPR,
+                    ymin = LWR)) +
+  theme_xinavane() +
+  ggtitle('Odds ratios for absence',
+          'April 2015 to April 2016') +
+  xlab('') +
+  geom_label(aes(y = COEFFICIENT - 0.3,
+                   label = paste0(round(COEFFICIENT, digits = 3),
+                                  '\n',
+                                  round(LWR, digits = 3),
+                                  '-',
+                                  round(UPR, digits = 3)))) +
+  ylim(-0.5, 1.5)
+
+# Make prediction for clarity
+prediction_df <- 
+  expand.grid(location = c('MDA zone', 'Manhiça'),
+             mda = c('Pre', 'Post'))
+prediction_df$predicted <- exp(predict(fit, prediction_df))
+prediction_df$label <- paste0(prediction_df$location, 
+                              '\n',
+                              prediction_df$mda,
+                              '-MDA')
+prediction_df$label <- factor(prediction_df$label,
+                              levels = prediction_df$label)
+ggplot(data = prediction_df,
+       aes(x = label,
+           y = predicted * 100)) +
+  geom_bar(stat = 'identity') + 
+  theme_xinavane() +
+  xlab('Location/time') +
+  ylab('Odds of absence (%)') +
+  ggtitle('Absenteeism by location/time',
+          'One-contract workers only') +
+  geom_label(aes(label = paste0(round(predicted * 100, digits = 2), '%')))
+```
+
+# Difference in differences visualization
+
+
+## Difference in differences with detail
+
+```{r}
+ggplot(data = model_data,
+       aes(x = month_start,
+           y = absenteeism_rate,
+           color = location)) +
+  geom_jitter(alpha = 0.2) +
+  geom_smooth(alpha = 0.5) +
+  # geom_line(aes(group = number)) +
+  xlab('Month') +
+  ylab('Worker-specific absenteeism rate') +
+  scale_color_manual(name = 'Location',
+                     values = c('darkorange', 'darkgreen')) +
+  geom_vline(xintercept = as.numeric(as.Date(c('2015-12-01',
+                                               '2016-01-01'))),
+             lty = 2, 
+             alpha = 0.6) +
+  scale_y_log10() +
+  theme_xinavane() +
+  ggtitle('Person-level absenteeism',
+          'One-contract workers only')
+```
+
+
+## Difference in differences with more aggregation
+
+```{r}
+x <- model_data %>%
+  group_by(month_start, 
+           location) %>%
+    summarise(absences = sum(absences),
+            sick_absences = sum(sick_absences),
+            eligibles = sum(eligibles)) %>%
+  mutate(absenteeism_rate = absences / eligibles * 100,
+         sick_absenteeism_rate = sick_absences / eligibles * 100) %>%
+  ungroup
+
+ggplot(data = x,
+       aes(x = month_start,
+           y = absenteeism_rate,
+           color = location,
+           group = location)) +
+  geom_line() +
+  xlab('Month') +
+  ylab('Absenteeism rate') +
+  scale_color_manual(name = 'Location',
+                     values = c('darkorange', 'darkgreen')) +
+  geom_vline(xintercept = as.numeric(as.Date(c('2015-12-01',
+                                               '2016-01-01'))),
+             lty = 2, 
+             alpha = 0.6) +
+  scale_y_log10() +
+  theme_xinavane() +
+  ggtitle('Location-level absenteeism',
+          'One-contract workers only')
+```
+
+
+```{r}
+# Get data just for the pre and post mda period
+x <- model_data %>%
+  group_by(location,mda) %>%
+  summarise(absences = sum(absences),
+            sick_absences = sum(sick_absences),
+            eligibles = sum(eligibles)) %>%
+  mutate(absenteeism_rate = absences / eligibles * 100,
+         sick_absenteeism_rate = sick_absences / eligibles * 100) %>%
+  ungroup
+
+ggplot(data = x,
+       aes(x = mda,
+           y = absenteeism_rate,
+           group = location,
+           color = location)) +
+  geom_line() +
+  geom_point() +
+  theme_xinavane() +
+  xlab('Time relative to MDA') +
+  ylab('Absenteeism rate') +
+  scale_color_manual(name = 'Location',
+                     values = c('darkorange', 'darkgreen')) +
+  ggtitle('Difference in differences: all absenteeism',
+          'One-contract workers only: January 2015 - April 2016') +
+  geom_label(aes(label = paste0(round(absenteeism_rate, digits = 2), '%'))) +
+  ylim(0,4.5)
+
+```
+
+```{r}
+ggplot(data = x,
+       aes(x = mda,
+           y = sick_absenteeism_rate,
+           group = location,
+           color = location)) +
+  geom_line() +
+  geom_point() +
+  theme_xinavane() +
+  xlab('Time relative to MDA') +
+  ylab('Absenteeism rate') +
+  scale_color_manual(name = 'Location',
+                     values = c('darkorange', 'darkgreen')) +
+  ggtitle('Difference in differences: sick absenteeism only',
+          'One-contract workers only: January 2015 - April 2016') +
+  geom_label(aes(label = paste0(round(sick_absenteeism_rate, digits = 2), '%')))
+
+```
+
+Below is a standardized version of the diff in diffs chart.
+
+```{r}
+y <-
+  x %>%
+  group_by(location) %>%
+  mutate(relative_absenteeism_rate = absenteeism_rate - first(absenteeism_rate))
+
+ggplot(data = y,
+       aes(x = mda,
+           y = relative_absenteeism_rate,
+           color = location,
+           group = location)) +
+  geom_line(alpha = 0.6) +
+  geom_point(alpha = 0.6) +
+  xlab('Time relative to MDA') +
+  ylab('Relative absenteeism rate') +
+  theme_xinavane() +
+    scale_color_manual(name = 'Location',
+                     values = c('darkorange', 'darkgreen')) +
+  ggtitle('Scaled difference in differences: all absenteeism',
+          'One-contract workers only: January 2015 - April 2016') +
+  geom_label(data = y %>% filter(mda == 'Post'), 
+                                 aes(label = round(relative_absenteeism_rate, digits = 2)))
+```
+
+```{r}
+# Diff in diff by department
+x <- model_data %>%
+    mutate(location_worker = paste0(location, '-', worker_type)) %>%
+  group_by(location_worker,
+           mda,
+           location,
+           worker_type) %>%
+    summarise(absences = sum(absences),
+            sick_absences = sum(sick_absences),
+            eligibles = sum(eligibles),
+            n_workers = length(unique(number))) %>%
+  mutate(absenteeism_rate = absences / eligibles * 100,
+         sick_absenteeism_rate = sick_absences / eligibles * 100) %>%
+  ungroup 
+
+ggplot(data = x,
+       aes(x = mda,
+           y = absenteeism_rate,
+           group = location_worker,
+           color = location,
+           pch = worker_type)) +
+  geom_point(aes(size = n_workers), alpha = 0.6) + 
+  geom_line(alpha = 0.6) +
+  theme_xinavane() +
+  xlab('Time relative to MDA') +
+  ylab('Absenteeism rate') +
+  scale_color_manual(name = 'Location',
+                     values = c('darkorange', 'darkgreen')) +
+  ggtitle('Absenteeism by worker type and location',
+          'One contract workers only')
+```
+
+
+# Details  
+
+All code for the cleaning, analysis and generation of this report are hosted on [Joe Brew's github page](https://github.com/joebrew/xinavane).
+
+******
+
+```{r, fig.height = 2.5}
+barplot(1, border = NA, col = 'white', yaxt = 'n')
+
+
+# ![alt text](../img/is_global.jpg)
+```
+
+
