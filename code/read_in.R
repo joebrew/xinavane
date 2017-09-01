@@ -820,6 +820,10 @@ if('read_in_finished.RData' %in% dir(data_dir)){
 }
 msg('Done reading in and cleaning data.')
 
+# Removing everything on or after March 
+# (since data apparently goes through March 20th)
+df <- df %>% filter(month_start <= '2017-02-28')
+
 # # Write dta and csv
 recent <- df %>%
   filter(month_start >= '2014-01-01')
