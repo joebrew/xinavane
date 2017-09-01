@@ -67,6 +67,10 @@ if('read_in_finished.RData' %in% dir(data_dir)){
                by = 1),
     number = unique(workers$number))
   
+  # Adjust the last_paid date
+  # This is a hotfix until we get a master data dump
+  workers$last_paid[workers$last_paid >= '2016-04-01'] <- as.Date('2017-03-20')
+  
   # Get start and end dates
   x <- left_join(x = x,
                  y = workers %>%
@@ -828,8 +832,8 @@ df <- df %>% filter(month_start <= '2017-02-28')
 recent <- df %>%
   filter(month_start >= '2014-01-01')
 library(foreign)
-write.dta(recent, 'xinavane_monthly_panel_2014-2017_only.dta')
-write_csv(recent, 'xinavane_monthly_panel_2014-2017_only.csv')
+write.dta(recent, 'xinavane_monthly_panel_with_census.dta')
+write_csv(recent, 'xinavane_monthly_panel_with_census.csv')
 # 
 # # 
 # # # ANIMATION PLOT
